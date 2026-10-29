@@ -45,3 +45,42 @@ export function headerOverlap(text,catalog){
   const observed=new Set(headerTerms(text));
   return (catalog.headerTerms||[]).filter(t=>observed.has(t));
 }
+
+// Compare only the headings of the candidate PDF pages. Words shared by every
+// candidate (manufacturer, document type, etc.) cannot identify a catalog.
+export function catalogIdentifiers(text){
+  return [...new Set((text.toUpperCase().match(/\b[A-Z]{1,4}[\s-]*[0-9]{1,4}[\s-]+[0-9]{1,4}[A-Z]?\b/g)||[]).map(normalize))];
+}
+function identifierInPhoto(id,text){
+  const chars=[...id].map(c=>c==='0'?'[0O]':c==='1'?'[1IL]':c);
+  return new RegExp('\\b'+chars.join('[\\s\\W_]*')+'(?![A-Z0-9])','i').test(text);
+}
+export function rankCatalogCandidates(text,candidates){
+  const groups=new Map();
+  for(const c of candidates){
+    const group=groups.get(c.catalog.id)||{words:new Set(),ids:new Set()};
+    headerTerms(c.headerText||'').forEach(word=>group.words.add(word));
+    catalogIdentifiers(c.headerText||'').forEach(id=>group.ids.add(id));
+    groups.set(c.catalog.id,group);
+  }
+  const observed=new Set(headerTerms(text)),observedIds=catalogIdentifiers(text);
+  const frequency=(key,value)=>[...groups.values()].filter(g=>g[key].has(value)).length;
+  const evidence=candidates.map(candidate=>{
+    const group=groups.get(candidate.catalog.id);
+    const words=[...group.words].filter(w=>observed.has(w));
+    const ids=[...group.ids].filter(id=>identifierInPhoto(id,text));
+    const distinctiveIds=ids.filter(id=>frequency('ids',id)<groups.size);
+    const uniqueWords=words.filter(w=>groups.size>1&&w.length>=5&&frequency('words',w)===1);
+    const conflicts=observedIds.filter(id=>[...group.ids].some(expected=>expected.match(/^[A-Z]+/)[0]===id.match(/^[A-Z]+/)[0])&&!group.ids.has(id)&&!ids.some(expected=>identifierInPhoto(expected,id)));
+    const score=distinctiveIds.length*20+uniqueWords.length*3;
+    return {candidate,ids,uniqueWords,conflicts,score,confirmed:!conflicts.length&&(ids.length>0||uniqueWords.length>=1&&words.length>=3)};
+  }).sort((a,b)=>b.score-a.score);
+  const best=evidence[0],runner=evidence[1];
+  // Same-model revisions remain separate candidates, even when another model is excluded.
+  const winners=best?.score>0?evidence.filter(e=>e.score===best.score&&!e.conflicts.length&&e.confirmed):[];
+  const modelPeers=best?.ids.length?evidence.filter(e=>e.ids.some(id=>best.ids.includes(id))&&!e.conflicts.length):[];
+  const decisive=best&&!best.conflicts.length&&best.confirmed&&best.score>=3&&modelPeers.length<=1&&(!runner||best.score-runner.score>=3);
+  return {evidence,selected:decisive?best.candidate:null,
+    candidates:modelPeers.length>1?modelPeers.map(e=>e.candidate):winners.length>1?winners.map(e=>e.candidate):candidates,
+    reason:decisive?(best.ids.length?'model '+best.ids.join(', '):best.uniqueWords.join(', ')):null};
+}

@@ -2,7 +2,7 @@
 
 [Open PageMatch on iPhone](https://thegameonaddict.github.io/PageMatch/)
 
-An offline-capable, browser-local PWA that matches a catalog's printed page ID to its physical PDF page. Import a text-based PDF, photograph an upright paper page including the footer, then recognize the page and verify its PDF preview. Header OCR can corroborate catalog text. The selected catalog narrows the search; searching all catalogs requires care with shared IDs and revisions. Ambiguous, duplicate and approximate matches require a choice. Manual printed-ID lookup is available.
+An offline-capable, browser-local PWA that matches a catalog's printed page ID to its physical PDF page. Import a text-based PDF, photograph an upright paper page including the footer, then recognize the page and verify its PDF preview. Header OCR compares model identifiers and distinguishing words against the actual candidate PDF page headings to separate catalogs sharing a printed ID. Common manufacturer/document words cannot identify a catalog. A focused second OCR pass retries unclear headings. Existing imports work without re-importing. The selected catalog narrows the search; same-model revisions still require confirmation. Ambiguous, duplicate and approximate matches require a choice. Manual printed-ID lookup is available.
 
 ## iPhone setup
 

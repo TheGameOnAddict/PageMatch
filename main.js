@@ -1,4 +1,4 @@
-import {normalize,pickPageId,candidatesFor,photoCandidates,headerTerms,headerOverlap} from './recognition.js';
+import {normalize,pickPageId,candidatesFor,photoCandidates,headerTerms,rankCatalogCandidates} from './recognition.js';
 const $=id=>document.getElementById(id);
 const url=path=>new URL(path,document.baseURI).href;
 const catalogs=new Map();
@@ -149,6 +149,27 @@ async function cropPhoto(region){
     return canvas;
   }finally{URL.revokeObjectURL(objectUrl);}
 }
+async function candidateHeaders(candidates){
+  const enriched=[];
+  for(const candidate of candidates){
+    const catalog=candidate.catalog;
+    catalog.pageHeaders??={};
+    const missing=candidate.pages.filter(n=>catalog.pageHeaders[n]===undefined);
+    if(missing.length){
+      const doc=catalog.id===activeId?activePdf:await readPdf(await catalog.blob.arrayBuffer());
+      try{
+        for(const n of missing){
+          const page=await doc.getPage(n),content=await page.getTextContent();
+          const top=page.view[1]+(page.view[3]-page.view[1])*.85;
+          catalog.pageHeaders[n]=content.items.filter(i=>i.transform[5]>top).map(i=>i.str).join(' ');
+          page.cleanup();
+        }
+      }finally{if(doc!==activePdf)await doc.destroy();}
+    }
+    enriched.push({...candidate,headerText:candidate.pages.map(n=>catalog.pageHeaders[n]).join(' ')});
+  }
+  return enriched;
+}
 async function recognize(){
   if(!photoBlob||!catalogs.size)return;
   const Tess=await loadOcr();status('scanStatus','Loading local OCR engine…');
@@ -165,19 +186,29 @@ async function recognize(){
       const canvas=await cropPhoto(region);const result=await worker.recognize(canvas);texts.push(result.data.text);canvas.width=canvas.height=1;
       if(photoCandidates(texts,scope).some(c=>c.score===0))break;
     }
-    const candidates=photoCandidates(texts,scope);
+    let candidates=photoCandidates(texts,scope);
+    const enriched=await candidateHeaders(candidates);
     await worker.setParameters({tessedit_char_whitelist:'',tessedit_pageseg_mode:Tess.PSM.SPARSE_TEXT});
-    const headerCanvas=await cropPhoto([0,0,1,.27]);const header=await worker.recognize(headerCanvas);headerCanvas.width=headerCanvas.height=1;
-    const evidence=candidates.map(c=>({c,terms:headerOverlap(header.data.text,c.catalog)}));
-    const corroborated=evidence.filter(e=>e.terms.length>=2);
+    const headerReads=[];
+    let ranking=rankCatalogCandidates('',enriched);
+    // A focused second pass enlarges the model/name when the first header read is inconclusive.
+    for(const region of [[0,0,1,.25],[.14,0,.72,.22]]){
+      const canvas=await cropPhoto(region);
+      const header=await worker.recognize(canvas);headerReads.push(header.data.text);canvas.width=canvas.height=1;
+      ranking=rankCatalogCandidates(headerReads.join('\n'),enriched);
+      if(ranking.selected||enriched.length===1&&ranking.evidence[0]?.confirmed)break;
+    }
+    candidates=ranking.selected?[ranking.selected]:ranking.candidates;
     const recognizedText=texts.join(' ').trim().replace(/\s+/g,' ').slice(0,110)||'nothing readable';
-    // Never auto-select a revision from a header. Exact unique IDs can open a preview.
-    if(candidates.length===1&&candidates[0].score===0&&candidates[0].pages.length===1){
+    const headerText=headerReads.join(' ').trim().replace(/\s+/g,' ').slice(0,180)||'nothing readable';
+    const conflict=ranking.evidence.some(e=>candidates.includes(e.candidate)&&e.conflicts.length);
+    if(candidates.length===1&&candidates[0].score===0&&candidates[0].pages.length===1&&!conflict){
       await useCandidate(candidates[0]);
-      status('scanStatus',`Read ${candidates[0].id}. ${corroborated.length?'Catalog header agrees.':'Catalog is based on your search selection / page index; header not confirmed.'} Verify the preview and catalog revision.`);
+      const confirmed=ranking.evidence.find(e=>e.candidate===candidates[0])?.confirmed;
+      status('scanStatus',`Read ${candidates[0].id}. ${ranking.reason?'Catalog matched by '+ranking.reason+'.':confirmed?'Catalog model/header confirmed.':'Catalog is based on your search selection / page index; header not confirmed.'} Verify the preview and catalog revision.`);
     }else{
       showCandidates(candidates);
-      status('scanStatus',`Footer OCR: ${recognizedText}. ${corroborated.length?'Header agrees with: '+[...new Set(corroborated.map(e=>e.c.catalog.name))].join(', ')+'. ':''}Select a match or use manual lookup.`);
+      status('scanStatus',`Footer OCR: ${recognizedText}. ${conflict?'Header model conflicts with the catalog. ':''}Header read: ${headerText}. ${ranking.evidence.some(e=>e.confirmed)?'Matching model/header; revision or page still needs confirmation.':'No distinctive model/name confirmed. Generic manufacturer words do not identify the catalog.'} Select a match or use manual lookup.`);
     }
   }finally{await worker.terminate();}
 }
