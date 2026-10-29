@@ -1,9 +1,13 @@
 import {normalize,pickPageId,candidatesFor,photoCandidates,headerTerms,rankCatalogCandidates} from './recognition.js';
 import {createInterface} from './ui.js';
+import {hasLiveCamera,waitForStableVideo} from './camera.js';
 const $=id=>document.getElementById(id);
 const url=path=>new URL(path,document.baseURI).href;
 const catalogs=new Map();
 let pdfjs,db,activeId=null,activePdf=null,photoBlob=null,stream=null,busy=false,renderTask=null,cameraSequence=0,cameraRequest=null;
+let cameraReady=false,cameraAbort=null,coverSequence=0;
+const cameraStage=document.querySelector('.camera-stage');
+const hasPhotoCover=()=>!$('photoPreview').hidden&&Boolean($('photoPreview').getAttribute('src'));
 const status=(id,message)=>{$(id).textContent=message;};
 const pause=()=>new Promise(resolve=>setTimeout(resolve,0));
 function setBusy(value){
@@ -11,6 +15,7 @@ function setBusy(value){
   for(const id of ['pdfFile','cameraButton','photoFile','clearButton','manualButton','matchScope','snapButton','retakeButton','manualOpenButton','refreshAppButton'])$(id).disabled=value;
   $('recognizeButton').disabled=value||!photoBlob||!catalogs.size;
   $('cameraButton').disabled=value||cameraRequest!==null;
+  $('snapButton').disabled=value||hasLiveCamera(stream)&&!cameraReady;
   $('resultSheet').setAttribute('aria-busy',String(value));
   refreshCatalogs();
 }
@@ -136,6 +141,7 @@ function showCandidates(candidates){
   }root.append(group);
 }
 async function loadPhoto(blob){
+  coverSequence++;cameraStage.classList.remove('returning-live');
   const image=new Image(),objectUrl=URL.createObjectURL(blob);
   try{
     image.src=objectUrl;await image.decode();
@@ -144,7 +150,12 @@ async function loadPhoto(blob){
     canvas.getContext('2d').drawImage(image,0,0,canvas.width,canvas.height);
     photoBlob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',.94));
     if(!photoBlob)throw Error('Could not decode photo. Choose a JPEG or take a new photo.');
-    const previewUrl=URL.createObjectURL(photoBlob);$('photoPreview').onload=()=>URL.revokeObjectURL(previewUrl);$('photoPreview').src=previewUrl;$('photoPreview').hidden=false;
+    const previewUrl=URL.createObjectURL(photoBlob);
+    try{
+      $('photoPreview').src=previewUrl;await $('photoPreview').decode();
+      coverSequence++;cameraStage.classList.remove('returning-live');$('photoPreview').hidden=false;
+    }
+    finally{URL.revokeObjectURL(previewUrl);}
     $('cameraWelcome').hidden=true;$('cameraGuide').hidden=true;
     status('scanStatus','Photo captured. Reading the printed page and catalog header…');
   }finally{URL.revokeObjectURL(objectUrl);}
@@ -225,28 +236,48 @@ async function recognize(){
   }finally{await worker.terminate();}
 }
 function stopStream(){
-  cameraSequence++;stream?.getTracks().forEach(track=>track.stop());stream=null;
+  cameraSequence++;coverSequence++;cameraAbort?.abort();cameraAbort=null;cameraReady=false;
+  stream?.getTracks().forEach(track=>track.stop());stream=null;
+  cameraStage.classList.remove('warming','returning-live');
   $('video').srcObject=null;$('cameraBox').hidden=true;$('cameraGuide').hidden=true;
-  $('cameraWelcome').hidden=Boolean(photoBlob);
+  $('cameraWelcome').hidden=hasPhotoCover();$('snapButton').disabled=busy;
 }
 function stopCamera(){cameraRequest=null;$('cameraButton').disabled=busy;stopStream();}
 async function startCamera(){
-  stopStream();const sequence=cameraSequence;
-  $('photoPreview').hidden=true;
-  if(!navigator.mediaDevices?.getUserMedia)throw Error('Live camera needs HTTPS and camera permission. Use Photos or the shutter to take a picture.');
-  status('cameraStatus','Allow camera access for the live feed, or use Photos.');
-  let incoming;
-  try{incoming=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:2560},height:{ideal:1920}}});}
-  catch(error){throw Error(`Camera unavailable (${error.message}). Use Photos or tap the shutter to choose a picture.`);}
-  if(sequence!==cameraSequence||!ui.isCamera()){incoming.getTracks().forEach(track=>track.stop());return;}
-  stream=incoming;$('video').srcObject=stream;$('cameraBox').hidden=false;
-  $('cameraWelcome').hidden=true;$('cameraGuide').hidden=false;
-  await $('video').play();status('cameraStatus','Keep the whole page, header, and printed ID in frame.');
+  if(!hasLiveCamera(stream)){
+    stopStream();const sequence=cameraSequence;
+    cameraStage.classList.add('warming');
+    if(!navigator.mediaDevices?.getUserMedia)throw Error('Live camera needs HTTPS and camera permission. Use Photos or the shutter to take a picture.');
+    status('cameraStatus',hasPhotoCover()?'Restoring camera…':'Allow camera access for the live feed, or use Photos.');
+    let incoming;
+    try{incoming=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:2560},height:{ideal:1920}}});}
+    catch(error){throw Error(`Camera unavailable (${error.message}). Use Photos or tap the shutter to choose a picture.`);}
+    if(sequence!==cameraSequence||!ui.isCamera()){incoming.getTracks().forEach(track=>track.stop());return;}
+    stream=incoming;$('video').srcObject=stream;
+  }
+  const sequence=cameraSequence;
+  cameraAbort?.abort();const readiness=new AbortController();cameraAbort=readiness;
+  cameraReady=false;$('snapButton').disabled=true;$('cameraBox').hidden=false;
+  await $('video').play();
+  await waitForStableVideo($('video'),{signal:readiness.signal});
+  if(sequence!==cameraSequence||!ui.isCamera())return;
+  cameraReady=true;$('snapButton').disabled=busy;
+  cameraStage.classList.remove('warming');$('cameraWelcome').hidden=true;
+  if(!photoBlob){
+    $('cameraGuide').hidden=false;
+    const cover=++coverSequence;
+    cameraStage.classList.add('returning-live');
+    await new Promise(resolve=>setTimeout(resolve,160));
+    if(sequence!==cameraSequence||cover!==coverSequence)return;
+    $('photoPreview').hidden=true;$('photoPreview').removeAttribute('src');
+    cameraStage.classList.remove('returning-live');
+  }
+  status('cameraStatus','Keep the whole page, header, and printed ID in frame.');
 }
 function requestCamera(){
   if(busy||cameraRequest!==null)return;
   const request={};cameraRequest=request;$('cameraButton').disabled=true;
-  startCamera().catch(error=>{if(cameraRequest===request&&ui.isCamera())status('cameraStatus',error.message);}).finally(()=>{
+  startCamera().catch(error=>{if(cameraRequest===request){stopStream();if(ui.isCamera())status('cameraStatus',error.message);}}).finally(()=>{
     if(cameraRequest===request){cameraRequest=null;$('cameraButton').disabled=busy;}
   });
 }
@@ -256,14 +287,16 @@ async function scanCurrentPhoto(){
   if(!catalogs.size){$('sheetTitle').textContent='Add a catalog first';$('result').textContent='Go to Setup and add your PDF catalog. Then take or choose a photo to find its page.';status('scanStatus','Your library is empty.');return;}
   await recognize();
 }
-async function usePhoto(file){stopCamera();await loadPhoto(file);await scanCurrentPhoto();}
+async function usePhoto(file){if(!hasLiveCamera(stream))stopCamera();await loadPhoto(file);await scanCurrentPhoto();}
 function retake(){
-  if(busy)return;ui.closeSheet();photoBlob=null;$('photoPreview').hidden=true;$('photoPreview').removeAttribute('src');
-  $('pdfPreview').replaceChildren();$('result').textContent='Take a picture to find your page.';
+  if(busy)return;
+  // Keep the decoded photo in place until a settled live frame can replace it.
+  photoBlob=null;$('recognizeButton').disabled=true;
+  ui.closeSheet().then(closed=>{if(closed){$('pdfPreview').replaceChildren();$('result').textContent='Take a picture to find your page.';}});
   requestCamera();
 }
 const ui=createInterface({
-  onCamera:()=>{if($('resultSheet').hidden)requestCamera();},
+  onCamera:()=>{if($('resultSheet').hidden||$('resultSheet').classList.contains('closing'))requestCamera();},
   onSetup:stopCamera,onRetake:retake
 });
 $('pdfFile').onchange=e=>{const file=e.target.files?.[0];if(file)run(()=>indexPdf(file),'catalogStatus');e.target.value='';};
@@ -272,10 +305,11 @@ $('cameraButton').onclick=requestCamera;
 $('snapButton').onclick=()=>{
   if(busy)return;
   if(!stream){$('photoFile').click();return;}
+  if(!cameraReady)return;
   run(async()=>{
   const video=$('video');if(!video.videoWidth)throw Error('Camera is starting. Wait for the live preview.');
   const canvas=$('photoCanvas');canvas.width=video.videoWidth;canvas.height=video.videoHeight;canvas.getContext('2d').drawImage(video,0,0);
-  const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',.95));stopCamera();canvas.width=canvas.height=1;
+  const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',.95));canvas.width=canvas.height=1;
   if(blob){await loadPhoto(blob);await scanCurrentPhoto();}
   });
 };

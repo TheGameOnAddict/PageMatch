@@ -7,6 +7,7 @@ export function sheetSwipe(dy,expanded){
 export function createInterface({onCamera,onSetup,onRetake}){
   const $=id=>document.getElementById(id);
   let screen='setup',expanded=false;
+  let closeTimer=null,closingPromise=null,finishClose=null;
   function showScreen(next){
     if(next===screen)return;
     screen=next;
@@ -25,10 +26,22 @@ export function createInterface({onCamera,onSetup,onRetake}){
     if(!value)$('sheetBody').scrollTop=0;
   }
   function showSheet(expand=false){
+    if(closeTimer!==null){clearTimeout(closeTimer);closeTimer=null;finishClose?.(false);finishClose=null;}
+    $('resultSheet').classList.remove('closing');
     $('resultSheet').hidden=false;setExpanded(expand);
   }
   function closeSheet(){
-    $('resultSheet').hidden=true;setExpanded(false);
+    if($('resultSheet').hidden)return Promise.resolve(true);
+    if(closeTimer!==null)return closingPromise;
+    $('resultSheet').classList.add('closing');
+    closingPromise=new Promise(resolve=>{finishClose=resolve;});
+    const delay=globalThis.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches?0:200;
+    closeTimer=setTimeout(()=>{
+      $('resultSheet').hidden=true;$('resultSheet').classList.remove('closing');setExpanded(false);
+      closeTimer=null;finishClose(true);finishClose=null;
+      if(screen==='camera'&&$('resultSheet').contains(document.activeElement))$('snapButton').focus({preventScroll:true});
+    },delay);
+    return closingPromise;
   }
   $('openScannerButton').onclick=()=>showScreen('camera');
   $('backToSetupButton').onclick=()=>showScreen('setup');
@@ -48,6 +61,7 @@ export function createInterface({onCamera,onSetup,onRetake}){
   $('screens').addEventListener('touchcancel',()=>{touchStart=null;},{passive:true});
   let sheetStart=null,dragged=false;
   $('resultSheet').addEventListener('pointerdown',event=>{
+    if($('resultSheet').classList.contains('closing'))return;
     if(event.pointerType==='mouse'&&event.button!==0)return;
     if(event.target.closest('button,input,select,a')&&!event.target.closest('#sheetExpandButton'))return;
     if(expanded&&!event.target.closest('.sheet-header'))return;
@@ -66,6 +80,7 @@ export function createInterface({onCamera,onSetup,onRetake}){
   });
   $('resultSheet').addEventListener('pointercancel',()=>{sheetStart=null;dragged=false;});
   $('resultSheet').addEventListener('click',event=>{
+    if($('resultSheet').classList.contains('closing'))return;
     if(!expanded&&!dragged&&!event.target.closest('button,input,select,a,label'))setExpanded(true);
   });
   document.addEventListener('keydown',event=>{

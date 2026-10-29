@@ -39,8 +39,8 @@ test('build versions the complete module chain and offline OCR asset paths',()=>
   const main=readFileSync(new URL('main.js',output),'utf8');
   const precache=JSON.parse(readFileSync(new URL('precache.json',output),'utf8'));
   const hash=html.match(/main\.js\?build=([a-f0-9]{16})/)?.[1];assert.ok(hash);
-  for(const file of ['styles.css','main.js','recognition.js','ui.js','manifest.webmanifest'])assert.ok(precache.includes('./'+file+'?build='+hash),file);
-  for(const file of ['recognition.js','ui.js'])assert.ok(main.includes('./'+file+'?build='+hash),file);
+  for(const file of ['styles.css','main.js','recognition.js','ui.js','camera.js','manifest.webmanifest'])assert.ok(precache.includes('./'+file+'?build='+hash),file);
+  for(const file of ['recognition.js','ui.js','camera.js'])assert.ok(main.includes('./'+file+'?build='+hash),file);
   assert.ok(!main.includes('./vendor/'));
   for(const file of ['pdf.min.mjs','pdf.worker.min.mjs','tesseract.min.js','tesseract.worker.min.js','lang/eng.traineddata.gz','core/tesseract-core-lstm.wasm.js']){
     const path=`./vendor-${hash}/${file}`;assert.ok(precache.includes(path),path);assert.ok(existsSync(new URL(path,output)),path);

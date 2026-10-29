@@ -21,7 +21,7 @@ Header OCR compares model identifiers and distinguishing words against actual ca
 
 PDFs must have selectable text and supported bottom-center IDs such as `1H18`. Scanned-only PDF indexing, perspective correction, variable training, QR generation and report formulas are not implemented. The formulas panel is a placeholder only.
 
-PDF bytes, camera/photo pixels, extracted text, OCR and indexes stay in the browser. There is no upload endpoint, analytics or remote AI. Runtime libraries, workers, WASM and language data are served from the app's own origin and cached for offline use. The camera stops when returning to Setup or backgrounding the app. Local catalogs are not encrypted by this app. Never commit private catalogs, photos or test renders to this repository.
+PDF bytes, camera/photo pixels, extracted text, OCR and indexes stay in the browser. There is no upload endpoint, analytics or remote AI. Runtime libraries, workers, WASM and language data are served from the app's own origin and cached for offline use. The camera stays ready behind captured results for seamless retakes, and stops when returning to Setup or backgrounding the app. A retake holds the captured image until decoded live frames have stable dimensions; the result sheet slides down as the feed resumes. Local catalogs are not encrypted by this app. Never commit private catalogs, photos or test renders to this repository.
 
 ## Development and deployment
 
@@ -33,5 +33,4 @@ Tests cover page matching, catalog disambiguation and gesture thresholds. Browse
 
 ## Refreshing the app
 
-While online, use **Refresh app** at the bottom of Setup, or open https://thegameonaddict.github.io/PageMatch/?v=0.4.1. This refreshes the application without clearing catalog PDFs or indexes. Each release uses matching versioned scripts, styles and OCR asset paths. Online page navigation checks the server first; offline navigation, including version-query URLs, falls back to the cached app. Do not clear Safari website data to update: that can delete your local catalogs.
-
+While online, use **Refresh app** at the bottom of Setup, or open https://thegameonaddict.github.io/PageMatch/?v=0.4.2. This refreshes the application without clearing catalog PDFs or indexes. Each release uses matching versioned scripts, styles and OCR asset paths. Online page navigation checks the server first; offline navigation, including version-query URLs, falls back to the cached app. Do not clear Safari website data to update: that can delete your local catalogs.

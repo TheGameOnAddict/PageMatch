@@ -3,7 +3,7 @@ import {join,dirname} from 'node:path';
 import {createHash} from 'node:crypto';
 const root=process.cwd(),out=join(root,'dist');
 rmSync(out,{recursive:true,force:true});mkdirSync(out,{recursive:true});
-for(const f of ['index.html','styles.css','main.js','recognition.js','ui.js','manifest.webmanifest','service-worker.js'])copyFileSync(join(root,f),join(out,f));
+for(const f of ['index.html','styles.css','main.js','recognition.js','ui.js','camera.js','manifest.webmanifest','service-worker.js'])copyFileSync(join(root,f),join(out,f));
 cpSync(join(root,'icons'),join(out,'icons'),{recursive:true});
 const vendor=join(out,'vendor');mkdirSync(vendor,{recursive:true});
 function copy(from,to){if(!existsSync(from))throw Error('Missing package asset: '+from);mkdirSync(dirname(to),{recursive:true});copyFileSync(from,to)}
@@ -23,7 +23,7 @@ for(const f of outputFiles().sort())version.update(readFileSync(f));
 version.update(readFileSync(join(root,'service-worker.js')));
 const hash=version.digest('hex').slice(0,16);
 renameSync(vendor,join(out,'vendor-'+hash));
-const appAssets=['styles.css','main.js','recognition.js','ui.js','manifest.webmanifest'];
+const appAssets=['styles.css','main.js','recognition.js','ui.js','camera.js','manifest.webmanifest'];
 for(const file of ['index.html','main.js']){
   let source=readFileSync(join(out,file),'utf8').replaceAll('./vendor/','./vendor-'+hash+'/');
   for(const asset of appAssets){
