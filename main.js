@@ -1,14 +1,17 @@
 import {normalize,pickPageId,candidatesFor,photoCandidates,headerTerms,rankCatalogCandidates} from './recognition.js';
+import {createInterface} from './ui.js';
 const $=id=>document.getElementById(id);
 const url=path=>new URL(path,document.baseURI).href;
 const catalogs=new Map();
-let pdfjs,db,activeId=null,activePdf=null,photoBlob=null,stream=null,busy=false,renderTask=null;
+let pdfjs,db,activeId=null,activePdf=null,photoBlob=null,stream=null,busy=false,renderTask=null,cameraSequence=0,cameraRequest=null;
 const status=(id,message)=>{$(id).textContent=message;};
 const pause=()=>new Promise(resolve=>setTimeout(resolve,0));
 function setBusy(value){
   busy=value;
-  for(const id of ['pdfFile','cameraButton','photoFile','clearButton','manualButton','matchScope'])$(id).disabled=value;
+  for(const id of ['pdfFile','cameraButton','photoFile','clearButton','manualButton','matchScope','snapButton','retakeButton','manualOpenButton'])$(id).disabled=value;
   $('recognizeButton').disabled=value||!photoBlob||!catalogs.size;
+  $('cameraButton').disabled=value||cameraRequest!==null;
+  $('resultSheet').setAttribute('aria-busy',String(value));
   refreshCatalogs();
 }
 async function loadPdfJs(){
@@ -77,21 +80,27 @@ async function activate(id){
 }
 function refreshCatalogs(){
   const root=$('catalogList');root.replaceChildren();
+  const filter=$('matchScope'),selected=filter.value;
+  filter.replaceChildren(new Option('All catalogs','all'));
   for(const catalog of catalogs.values()){
-    const row=document.createElement('div');row.className='catalog'+(catalog.id===activeId?' selected':'');
-    const info=document.createElement('div'),title=document.createElement('strong'),small=document.createElement('small');
+    filter.append(new Option(catalog.name,catalog.id));
+    const row=document.createElement('div');row.className='catalog';
+    const icon=document.createElement('span');icon.className='catalog-icon';icon.textContent='PDF';icon.setAttribute('aria-hidden','true');
+    const info=document.createElement('div'),title=document.createElement('strong'),small=document.createElement('small');info.className='catalog-info';
     title.textContent=catalog.name;small.textContent=`${catalog.pageCount} PDF pages · ${Object.keys(catalog.index).length} printed IDs`;
     info.append(title,small);
-    const button=document.createElement('button');button.textContent=catalog.id===activeId?'Selected':'Select';button.disabled=busy||catalog.id===activeId;
-    button.onclick=()=>run(()=>activate(catalog.id),'catalogStatus');row.append(info,button);root.append(row);
+    const ready=document.createElement('span');ready.className='catalog-ready';ready.textContent='✓ Ready';row.append(icon,info,ready);root.append(row);
   }
+  if(selected==='all'||catalogs.has(selected))filter.value=selected;
+  if(!catalogs.size){const empty=document.createElement('div');empty.className='empty-library';empty.textContent='Add a PDF catalog to start. Your library will be saved here, ready to scan offline.';root.append(empty);}
+  $('catalogCount').textContent=catalogs.size;
   $('clearButton').hidden=!catalogs.size;
 }
 async function run(fn,statusId='scanStatus'){
   if(busy)return;setBusy(true);
-  try{await fn();}catch(error){status(statusId,error.message);}finally{setBusy(false);}
+  try{await fn();}catch(error){status(statusId,error.message);if(statusId==='scanStatus'){ui.showSheet();$('sheetTitle').textContent='Try another photo';}}finally{setBusy(false);}
 }
-function searchCatalogs(){return $('matchScope').value==='all'?[...catalogs.values()]:[catalogs.get(activeId)].filter(Boolean);}
+function searchCatalogs(){return $('matchScope').value==='all'?[...catalogs.values()]:[catalogs.get($('matchScope').value)].filter(Boolean);}
 async function showPage(pageNo,id){
   if(!activePdf)return;
   const page=await activePdf.getPage(pageNo),base=page.getViewport({scale:1});
@@ -108,6 +117,7 @@ async function useCandidate(candidate){
   const title=document.createElement('strong'),small=document.createElement('small');title.textContent=candidate.id;
   small.textContent=`${candidate.catalog.name} · PDF page ${candidate.pages.join(', ')}${candidate.score?' · approximate match: verify carefully':''}`;
   box.append(title,small);$('result').replaceChildren(box);$('pdfPreview').replaceChildren();
+  $('sheetTitle').textContent='Page found';
   if(candidate.pages.length===1)await showPage(candidate.pages[0],candidate.id);
   else{
     const label=document.createElement('p');label.textContent='This printed ID occurs more than once. Choose a PDF page:';$('result').append(label);
@@ -116,6 +126,7 @@ async function useCandidate(candidate){
 }
 function showCandidates(candidates){
   $('pdfPreview').replaceChildren();const root=$('result');root.replaceChildren();
+  $('sheetTitle').textContent=candidates.length?'Choose a match':'No match yet';
   if(!candidates.length){root.textContent='No indexed match. Retake a straight, sharp photo including the footer, or enter the printed ID below.';return;}
   const label=document.createElement('p');label.textContent='Choose and verify a possible match. Catalog revisions may share printed IDs.';root.append(label);
   const group=document.createElement('div');group.className='candidates';
@@ -134,7 +145,8 @@ async function loadPhoto(blob){
     photoBlob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',.94));
     if(!photoBlob)throw Error('Could not decode photo. Choose a JPEG or take a new photo.');
     const previewUrl=URL.createObjectURL(photoBlob);$('photoPreview').onload=()=>URL.revokeObjectURL(previewUrl);$('photoPreview').src=previewUrl;$('photoPreview').hidden=false;
-    status('scanStatus','Photo ready. Run recognition.');
+    $('cameraWelcome').hidden=true;$('cameraGuide').hidden=true;
+    status('scanStatus','Photo captured. Reading the printed page and catalog header…');
   }finally{URL.revokeObjectURL(objectUrl);}
 }
 async function cropPhoto(region){
@@ -212,27 +224,71 @@ async function recognize(){
     }
   }finally{await worker.terminate();}
 }
-function stopCamera(){stream?.getTracks().forEach(track=>track.stop());stream=null;$('video').srcObject=null;$('cameraBox').hidden=true;}
-$('pdfFile').onchange=e=>{const file=e.target.files?.[0];if(file)run(()=>indexPdf(file),'catalogStatus');e.target.value='';};
-$('photoFile').onchange=e=>{const file=e.target.files?.[0];if(file)run(()=>loadPhoto(file));e.target.value='';};
-$('cameraButton').onclick=()=>run(async()=>{
-  stopCamera();if(!navigator.mediaDevices?.getUserMedia)throw Error('Live camera needs HTTPS and camera permission. Use Choose / take photo below.');
-  try{
-    stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:2560},height:{ideal:1920}}});
-    $('video').srcObject=stream;$('cameraBox').hidden=false;await $('video').play();
-  }catch(error){stopCamera();throw Error(`Camera unavailable: ${error.message}. Use Choose / take photo.`);}
+function stopStream(){
+  cameraSequence++;stream?.getTracks().forEach(track=>track.stop());stream=null;
+  $('video').srcObject=null;$('cameraBox').hidden=true;$('cameraGuide').hidden=true;
+  $('cameraWelcome').hidden=Boolean(photoBlob);
+}
+function stopCamera(){cameraRequest=null;$('cameraButton').disabled=busy;stopStream();}
+async function startCamera(){
+  stopStream();const sequence=cameraSequence;
+  $('photoPreview').hidden=true;
+  if(!navigator.mediaDevices?.getUserMedia)throw Error('Live camera needs HTTPS and camera permission. Use Photos or the shutter to take a picture.');
+  status('cameraStatus','Allow camera access for the live feed, or use Photos.');
+  let incoming;
+  try{incoming=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:2560},height:{ideal:1920}}});}
+  catch(error){throw Error(`Camera unavailable (${error.message}). Use Photos or tap the shutter to choose a picture.`);}
+  if(sequence!==cameraSequence||!ui.isCamera()){incoming.getTracks().forEach(track=>track.stop());return;}
+  stream=incoming;$('video').srcObject=stream;$('cameraBox').hidden=false;
+  $('cameraWelcome').hidden=true;$('cameraGuide').hidden=false;
+  await $('video').play();status('cameraStatus','Keep the whole page, header, and printed ID in frame.');
+}
+function requestCamera(){
+  if(busy||cameraRequest!==null)return;
+  const request={};cameraRequest=request;$('cameraButton').disabled=true;
+  startCamera().catch(error=>{if(cameraRequest===request&&ui.isCamera())status('cameraStatus',error.message);}).finally(()=>{
+    if(cameraRequest===request){cameraRequest=null;$('cameraButton').disabled=busy;}
+  });
+}
+async function scanCurrentPhoto(){
+  ui.showSheet();$('sheetTitle').textContent='Reading your page…';
+  $('result').textContent='Matching against '+($('matchScope').value==='all'?'all your catalogs.':'your chosen catalog.');$('pdfPreview').replaceChildren();
+  if(!catalogs.size){$('sheetTitle').textContent='Add a catalog first';$('result').textContent='Go to Setup and add your PDF catalog. Then take or choose a photo to find its page.';status('scanStatus','Your library is empty.');return;}
+  await recognize();
+}
+async function usePhoto(file){stopCamera();await loadPhoto(file);await scanCurrentPhoto();}
+function retake(){
+  if(busy)return;ui.closeSheet();photoBlob=null;$('photoPreview').hidden=true;$('photoPreview').removeAttribute('src');
+  $('pdfPreview').replaceChildren();$('result').textContent='Take a picture to find your page.';
+  requestCamera();
+}
+const ui=createInterface({
+  onCamera:()=>{if($('resultSheet').hidden)requestCamera();},
+  onSetup:stopCamera,onRetake:retake
 });
-$('stopButton').onclick=stopCamera;
-$('snapButton').onclick=()=>run(async()=>{
+$('pdfFile').onchange=e=>{const file=e.target.files?.[0];if(file)run(()=>indexPdf(file),'catalogStatus');e.target.value='';};
+$('photoFile').onchange=e=>{const file=e.target.files?.[0];if(file)run(()=>usePhoto(file));e.target.value='';};
+$('cameraButton').onclick=requestCamera;
+$('snapButton').onclick=()=>{
+  if(busy)return;
+  if(!stream){$('photoFile').click();return;}
+  run(async()=>{
   const video=$('video');if(!video.videoWidth)throw Error('Camera is starting. Wait for the live preview.');
   const canvas=$('photoCanvas');canvas.width=video.videoWidth;canvas.height=video.videoHeight;canvas.getContext('2d').drawImage(video,0,0);
   const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',.95));stopCamera();canvas.width=canvas.height=1;
-  if(blob)await loadPhoto(blob);
-});
-$('recognizeButton').onclick=()=>run(recognize);
+  if(blob){await loadPhoto(blob);await scanCurrentPhoto();}
+  });
+};
+$('recognizeButton').onclick=()=>run(scanCurrentPhoto);
+$('matchScope').onchange=()=>{if(photoBlob&&!$('resultSheet').hidden)run(scanCurrentPhoto);};
+$('manualOpenButton').onclick=()=>{
+  ui.showSheet(true);$('sheetTitle').textContent='Find a printed page';
+  status('scanStatus','Enter the ID printed on the paper page.');$('manualPage').focus();
+};
 $('manualButton').onclick=()=>run(async()=>{
   const candidates=candidatesFor(normalize($('manualPage').value),searchCatalogs());const exact=candidates.filter(c=>c.score===0);
   if(exact.length===1)await useCandidate(exact[0]);else showCandidates(exact.length?exact:candidates);
+  status('scanStatus','Manual lookup. Verify the catalog revision and PDF preview.');
 });
 $('manualPage').onkeydown=e=>{if(e.key==='Enter')$('manualButton').click();};
 $('clearButton').onclick=()=>run(async()=>{
@@ -241,9 +297,14 @@ $('clearButton').onclick=()=>run(async()=>{
   if(activePdf)await activePdf.destroy();activePdf=null;photoBlob=null;
   $('photoPreview').hidden=true;$('photoPreview').removeAttribute('src');$('pdfPreview').replaceChildren();$('result').textContent='No scan yet.';
   status('catalogStatus','No catalog imported.');status('scanStatus','Import a catalog to begin.');stopCamera();
+  ui.closeSheet();
 });
 window.addEventListener('pagehide',stopCamera);
-document.addEventListener('visibilitychange',()=>{if(document.hidden)stopCamera();});
+let resumeCamera=false;
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden){resumeCamera=Boolean(stream);stopCamera();}
+  else if(resumeCamera&&ui.isCamera()&&!photoBlob){resumeCamera=false;requestCamera();}
+});
 async function setupOffline(){
   if(!('serviceWorker' in navigator)){status('offlineStatus','Offline installation unavailable in this browser.');return;}
   try{
