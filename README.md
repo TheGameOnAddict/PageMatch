@@ -30,3 +30,8 @@ Use Node 22 or newer. Run `npm ci`, `npm run check`, `npm test`, `npm run build`
 Push source to `main`; `.github/workflows/pages.yml` checks, tests, builds and deploys through GitHub Actions. Keep `.local`, `dist`, `node_modules`, PDFs and archives out of Git. `ui.js` handles screen navigation and sheet gestures; `main.js` handles local storage, capture, OCR and previews. Desktop alternatives: navigation buttons, Alt+Right/Alt+Left, sheet toggle button, Escape to minimize/close.
 
 Tests cover page matching, catalog disambiguation and gesture thresholds. Browser checks use local PDF-render fixtures and synthetic competing catalogs. Physical iPhone camera permissions, touch feel and airplane-mode behavior still require device testing.
+
+## Refreshing the app
+
+While online, use **Refresh app** at the bottom of Setup, or open https://thegameonaddict.github.io/PageMatch/?v=0.4.1. This refreshes the application without clearing catalog PDFs or indexes. Each release uses matching versioned scripts, styles and OCR asset paths. Online page navigation checks the server first; offline navigation, including version-query URLs, falls back to the cached app. Do not clear Safari website data to update: that can delete your local catalogs.
+

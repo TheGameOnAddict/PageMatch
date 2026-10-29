@@ -7,11 +7,24 @@ self.addEventListener('install',event=>event.waitUntil((async()=>{
   await self.skipWaiting();
 })()));
 self.addEventListener('activate',event=>event.waitUntil((async()=>{
-  for(const key of await caches.keys())if(key.startsWith('pagematch-assets-')&&key!==VERSION)await caches.delete(key);
+  // Keep one prior release usable in a tab that is still open during an update.
+  const previous=(await caches.keys()).filter(key=>key.startsWith('pagematch-assets-')&&key!==VERSION);
+  for(const key of previous.slice(0,-1))await caches.delete(key);
   await self.clients.claim();
 })()));
 self.addEventListener('fetch',event=>{
   const req=event.request;
   if(req.method!=='GET'||new URL(req.url).origin!==self.location.origin)return;
-  event.respondWith((async()=>{const cache=await caches.open(VERSION);return await cache.match(req)||fetch(req);})());
+  event.respondWith((async()=>{
+    const cache=await caches.open(VERSION);
+    if(req.mode==='navigate'){
+      try{const response=await fetch(req,{cache:'no-store'});if(response.ok)return response;throw Error('App unavailable');}
+      catch(error){
+        const offline=await cache.match(new URL('./',self.registration.scope).href);
+        if(offline)return offline;
+        throw error;
+      }
+    }
+    return await cache.match(req)||await caches.match(req)||fetch(req);
+  })());
 });

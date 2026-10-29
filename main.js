@@ -8,7 +8,7 @@ const status=(id,message)=>{$(id).textContent=message;};
 const pause=()=>new Promise(resolve=>setTimeout(resolve,0));
 function setBusy(value){
   busy=value;
-  for(const id of ['pdfFile','cameraButton','photoFile','clearButton','manualButton','matchScope','snapButton','retakeButton','manualOpenButton'])$(id).disabled=value;
+  for(const id of ['pdfFile','cameraButton','photoFile','clearButton','manualButton','matchScope','snapButton','retakeButton','manualOpenButton','refreshAppButton'])$(id).disabled=value;
   $('recognizeButton').disabled=value||!photoBlob||!catalogs.size;
   $('cameraButton').disabled=value||cameraRequest!==null;
   $('resultSheet').setAttribute('aria-busy',String(value));
@@ -308,7 +308,7 @@ document.addEventListener('visibilitychange',()=>{
 async function setupOffline(){
   if(!('serviceWorker' in navigator)){status('offlineStatus','Offline installation unavailable in this browser.');return;}
   try{
-    const registration=await navigator.serviceWorker.register('./service-worker.js');
+    const registration=await navigator.serviceWorker.register('./service-worker.js',{updateViaCache:'none'});
     if(registration.active&&!registration.installing)status('offlineStatus','Offline ready · catalogs stay on this device');
     const watch=worker=>{if(!worker)return;worker.addEventListener('statechange',()=>{
       if(worker.state==='activated')status('offlineStatus','Offline ready · catalogs stay on this device');
@@ -317,6 +317,14 @@ async function setupOffline(){
     watch(registration.installing);registration.addEventListener('updatefound',()=>watch(registration.installing));
   }catch(error){status('offlineStatus','Offline cache unavailable. Keep online and reopen to retry.');}
 }
+$('refreshAppButton').onclick=()=>{
+  if(busy)return;
+  if(!navigator.onLine){status('offlineStatus','Connect to the internet to refresh the app. Your catalogs are safe.');return;}
+  // Change the navigation URL so even an older cache-first worker fetches HTML.
+  // Build-specific URLs in that HTML fetch matching code. IndexedDB is untouched.
+  const fresh=new URL('./',document.baseURI);fresh.searchParams.set('v',Date.now().toString());
+  location.replace(fresh.href);
+};
 setBusy(true);
 (async()=>{
   try{
