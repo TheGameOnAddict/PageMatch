@@ -1,3 +1,4 @@
+import {extractRule} from './patterns.js';
 // Coordinates are normalized to the rendered page's top-left origin.
 export function regionFromPoints(a,b){
   const clamp=n=>Math.max(0,Math.min(1,n));
@@ -19,6 +20,7 @@ export function textBoxes(items,viewport,multiply){
 export function validateField(field,others=[]){
   if(!/^[A-Za-z][A-Za-z0-9_]{0,47}$/.test(field.name))throw Error('Use a field name starting with a letter, followed by letters, numbers or underscores (up to 48 characters).');
   if(others.some(f=>f.name.toLowerCase()===field.name.toLowerCase()))throw Error('Each field needs a different name.');
+  if(field.rule)return field;
   const r=field.region;
   if(!r||![r.x,r.y,r.width,r.height].every(Number.isFinite)||r.x<0||r.y<0||r.width<=0||r.height<=0||r.x+r.width>1.00001||r.y+r.height>1.00001)throw Error('Mark a region on the page first.');
   if(field.pattern){
@@ -42,6 +44,7 @@ export function capturePattern(text,pattern){
   return values.filter(Boolean).join(' ');
 }
 export function extractField(field,boxes){
+  if(field.rule)return extractRule(field.rule,boxes);
   const r=field.region;
   const selected=boxes.filter(b=>{
     // Use the text center to avoid pulling adjacent rows in at a region edge.

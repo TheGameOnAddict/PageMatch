@@ -117,7 +117,7 @@ async function showPage(pageNo,id){
   const viewport=page.getViewport({scale:Math.min(1.8,1600/base.width)});
   const canvas=document.createElement('canvas');canvas.width=Math.round(viewport.width);canvas.height=Math.round(viewport.height);
   const label=document.createElement('p');label.className='muted';label.textContent=`Printed page ${id} · PDF page ${pageNo} of ${activePdf.numPages}`;
-  const extract=document.createElement('button');extract.className='secondary';extract.textContent='Capture fields from this page';
+  const extract=document.createElement('button');extract.className='secondary';extract.textContent='Find patterns on this page';
   const catalogId=activeId;extract.onclick=()=>training.open({catalogId,pageNo});
   $('pdfPreview').replaceChildren(label,extract,canvas);
   try{renderTask=page.render({canvasContext:canvas.getContext('2d'),viewport});await renderTask.promise;}
@@ -311,7 +311,7 @@ const training=createTraining({
   loadTemplates:()=>dbRequest('readonly',store=>store.getAll(),'templates'),
   saveTemplate:template=>dbRequest('readwrite',store=>store.put(template),'templates'),
   deleteTemplate:id=>dbRequest('readwrite',store=>store.delete(id),'templates'),
-  onOpen:stopCamera,onCount:count=>status('templateSummary',count?count+' template(s) saved on this device.':'Templates stay on this device.')
+  onOpen:stopCamera,onCount:count=>status('templateSummary',count?count+' pattern set(s) saved on this device.':'Templates stay on this device.')
 });
 $('pdfFile').onchange=e=>{const file=e.target.files?.[0];if(file)run(()=>indexPdf(file),'catalogStatus');e.target.value='';};
 $('photoFile').onchange=e=>{const file=e.target.files?.[0];if(file)run(()=>usePhoto(file));e.target.value='';};
