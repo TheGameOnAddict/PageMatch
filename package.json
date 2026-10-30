@@ -1,11 +1,11 @@
 {
   "name": "pagematch-offline",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "private": true,
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
-    "check": "node --check main.js && node --check recognition.js && node --check ui.js && node --check camera.js && node --check service-worker.js && node --check training.js && node --check extraction.js && node --check patterns.js && node --check refinement.js && node --check refinement-ui.js && node --check records.js && node --check records-ui.js && node --check structure-ui.js && node --check results.js",
+    "check": "node --check main.js && node --check recognition.js && node --check ui.js && node --check camera.js && node --check service-worker.js && node --check training.js && node --check extraction.js && node --check patterns.js && node --check refinement.js && node --check refinement-ui.js && node --check records.js && node --check records-ui.js && node --check structure-ui.js && node --check results.js && node --check guided-training.js && node --check visual-patterns.js",
     "test": "node --test tests/*.test.mjs",
     "preview": "node scripts/serve.mjs"
   },

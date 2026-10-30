@@ -1,3 +1,4 @@
+import {createGuidedTraining} from './guided-training.js';
 import {extractFields} from './records.js';
 import {createSeparator,createLayoutEditor} from './structure-ui.js';
 import {createRefiner} from './refinement-ui.js';
@@ -6,16 +7,16 @@ import {textBoxes,extractField} from './extraction.js';
 import {discoverPatterns,ruleKey} from './patterns.js';
 export function createTraining({catalogs,openPdf,loadTemplates,saveTemplate,onOpen,onCount,onClose}){
  const $=id=>document.getElementById(id),dialog=$('trainingDialog');
- let templates=[],fields=[],suggestions=[],boxes=[],doc=null,currentCatalog=null,currentPage=null,templateId=null,working=false,context={},activeList='suggestions';
+ let totalTemplates=0,templates=[],fields=[],suggestions=[],boxes=[],doc=null,currentCatalog=null,currentPage=null,templateId=null,working=false,context={},activeList='suggestions';
  const message=text=>{$('trainingStatus').textContent=text;};
  const el=(tag,text,className)=>{const node=document.createElement(tag);if(text!==undefined)node.textContent=text;if(className)node.className=className;return node;};
  const button=(text,action,style='secondary')=>{const b=el('button',text,style);b.type='button';b.onclick=action;return b;};
  function options(){
   $('templateChoice').replaceChildren(new Option('Automatic · use this catalog’s patterns',''));
   for(const t of templates)$('templateChoice').append(new Option(t.name,t.id));
-  $('templateChoice').value=templateId||'';onCount(templates.length);
+  $('templateChoice').value=templateId||'';onCount(totalTemplates);
  }
- async function refresh(){templates=await loadTemplates();options();}
+ async function refresh(){const all=await loadTemplates();totalTemplates=all.length;templates=all.filter(t=>t.schemaVersion!==4);options();}
  function lock(value){working=value;for(const e of dialog.querySelectorAll('button,input,select'))e.disabled=value;}
  async function task(fn){if(working)return;lock(true);try{await fn();}catch(e){message(e.message);}finally{lock(false);}}
  async function persist(next,arrangement=undefined){
@@ -146,7 +147,9 @@ export function createTraining({catalogs,openPdf,loadTemplates,saveTemplate,onOp
   $('trainingPage').value=initial.pageNo||'';dialog.showModal();
   await task(async()=>{await refresh();templateId=initial.templateId||null;fields=[];suggestions=[];boxes=[];render();if(catalogs().length)await scan();else message('Add a PDF catalog in Setup first.');if(initial.tab==='saved'){showList('confirmed');if(initial.arrange)$('confirmedPatterns').querySelector('button')?.click();}});
  }
- $('openTrainingButton').onclick=()=>open();
+ // The legacy editor remains available for previously saved pattern sets.
+ const guided=createGuidedTraining({catalogs,openPdf,saveTemplate,loadTemplates,onOpen,onClose,refresh,legacy:{open}});
+ $('openTrainingButton').onclick=()=>guided.open();
  $('closeTrainingButton').onclick=()=>{if(working)return;dialog.close();doc?.destroy();doc=null;currentCatalog=null;currentPage=null;$('trainingCanvas').width=$('trainingCanvas').height=1;Promise.resolve(onClose?.()).catch(e=>message(e.message));};
  dialog.addEventListener('cancel',e=>{e.preventDefault();$('closeTrainingButton').click();});dialog.addEventListener('keydown',e=>e.stopPropagation());
  $('loadTrainingPage').onclick=()=>task(scan);
@@ -158,5 +161,5 @@ export function createTraining({catalogs,openPdf,loadTemplates,saveTemplate,onOp
   else templateId=null;
   await scan();showList('confirmed');
  });
- return {open,refresh};
+ return {open:guided.open,refresh};
 }

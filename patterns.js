@@ -1,3 +1,4 @@
+import {extractVisual} from './visual-patterns.js';
 const clean=s=>s.toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
 export function pageLines(boxes){
  const lines=[];
@@ -49,6 +50,7 @@ export function discoverPatterns(boxes){
 }
 export function extractRule(rule,boxes){
  const candidates=discoverPatterns(boxes);
+ if(rule.kind==='visual-column')return extractVisual(rule,boxes,candidates.filter(c=>c.rule.kind==='column'));
  let match;
  if(rule.kind==='column'){
   const columns=candidates.filter(c=>c.rule.kind==='column');
