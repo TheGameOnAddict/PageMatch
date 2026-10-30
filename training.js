@@ -106,7 +106,7 @@ export function createTraining({catalogs,openPdf,loadTemplates,saveTemplate,onOp
  dialog.addEventListener('cancel',e=>{e.preventDefault();$('closeTrainingButton').click();});dialog.addEventListener('keydown',e=>e.stopPropagation());
  $('loadTrainingPage').onclick=()=>task(scan);
  $('trainingPage').onkeydown=e=>{if(e.key==='Enter')task(scan);};
- $('trainingCatalog').onchange=()=>{$('trainingPage').value='';task(scan);};
+ $('trainingCatalog').onchange=()=>{$('trainingPage').value='';suggestions=[];fields=[];boxes=[];templateId=null;currentPage=null;$('scannedPageLabel').textContent='';$('pagePreviewDetails').hidden=true;render();message('Catalog selected. Tap Scan page to find its patterns.');};
  $('templateChoice').onchange=()=>task(async()=>{
   const t=templates.find(t=>t.id===$('templateChoice').value);
   if(t){$('trainingCatalog').value=t.catalogId;templateId=t.id;$('trainingPage').value=context.catalogId===t.catalogId?context.pageNo:t.pageNo;}
