@@ -30,5 +30,6 @@ export function createRefiner({name,values,teaching,onApply,onCancel,saveLabel='
  }
  panel.append(summary,list,preview,help);
  const actions=el('div',undefined,'refine-footer');actions.append(button(saveLabel,()=>onApply(structuredClone(draft)),'primary'),button('Cancel',onCancel,'text-button'),button('Clear teaching',()=>{draft={version:1,keep:[],reject:[]};render();},'text-button'));panel.append(actions);render();
+ requestAnimationFrame(()=>{if(panel.isConnected)panel.scrollIntoView({block:'start',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});});
  return panel;
 }
