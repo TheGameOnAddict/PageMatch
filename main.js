@@ -126,20 +126,20 @@ async function refreshSavedResults(){
       onDiscover:()=>training.open(context),onArrange:templateId=>training.open({...context,templateId,tab:'saved'})}));
   }catch(error){$('savedPageResults').textContent='Saved patterns could not load: '+error.message;}
 }
-function matchBanner(id,pageNo){
-  const details=document.createElement('details');details.className='match-banner';
+function matchBanner(id,pageNo,approximate=false){
+  const details=document.createElement('details');details.className='match-banner'+(approximate?' approximate':'');
   const summary=document.createElement('summary'),title=document.createElement('strong'),catalog=document.createElement('span'),hint=document.createElement('small');
-  title.textContent=id;catalog.textContent=catalogs.get(activeId).name;hint.textContent='Match details';summary.append(title,catalog,hint);
+  title.textContent=id;catalog.textContent=catalogs.get(activeId).name;hint.textContent=approximate?'Approximate match · check details':'Match details';summary.append(title,catalog,hint);
   const evidence=document.createElement('div');evidence.className='match-evidence';
   const facts=document.createElement('p');facts.textContent='Printed '+id+' · PDF page '+pageNo+' of '+activePdf.numPages+'. Check the catalog revision before use.';
   evidence.append(scanStatusEl,facts);details.append(summary,evidence);$('result').replaceChildren(details);$('resultSheet').classList.add('has-match');
 }
-async function showPage(pageNo,id){
+async function showPage(pageNo,id,approximate=false){
   if(!activePdf)return;
   const page=await activePdf.getPage(pageNo),base=page.getViewport({scale:1});
   const viewport=page.getViewport({scale:Math.min(1.8,1600/base.width)});
   const canvas=document.createElement('canvas');canvas.width=Math.round(viewport.width);canvas.height=Math.round(viewport.height);canvas.setAttribute('role','img');canvas.setAttribute('aria-label','Matched PDF page '+pageNo);
-  matchedContext={catalogId:activeId,pageNo,printedId:id};$('resultOptions').open=false;$('sheetBody').scrollTop=0;matchBanner(id,pageNo);$('pdfPreview').replaceChildren(canvas);
+  matchedContext={catalogId:activeId,pageNo,printedId:id,approximate};$('resultOptions').open=false;$('sheetBody').scrollTop=0;matchBanner(id,pageNo,approximate);$('pdfPreview').replaceChildren(canvas);
   try{
     renderTask=page.render({canvasContext:canvas.getContext('2d'),viewport});await renderTask.promise;
     matchedBoxes=textBoxes((await page.getTextContent()).items,base,pdfjs.Util.transform);await refreshSavedResults();
@@ -153,10 +153,10 @@ async function useCandidate(candidate){
   small.textContent=`${candidate.catalog.name} · PDF page ${candidate.pages.join(', ')}${candidate.score?' · approximate match: verify carefully':''}`;
   box.append(title,small);$('result').replaceChildren(box);$('pdfPreview').replaceChildren();
   status('scanStatus',evidence);$('sheetTitle').textContent='Matched page';
-  if(candidate.pages.length===1)await showPage(candidate.pages[0],candidate.id);
+  if(candidate.pages.length===1)await showPage(candidate.pages[0],candidate.id,Boolean(candidate.score));
   else{
     const label=document.createElement('p');label.textContent='This printed ID occurs more than once. Choose a PDF page:';$('result').append(label);
-    for(const n of candidate.pages){const b=document.createElement('button');b.textContent=`Open PDF page ${n}`;b.onclick=()=>run(()=>showPage(n,candidate.id));$('result').append(b);}
+    for(const n of candidate.pages){const b=document.createElement('button');b.textContent=`Open PDF page ${n}`;b.onclick=()=>run(()=>showPage(n,candidate.id,Boolean(candidate.score)));$('result').append(b);}
   }
 }
 function showCandidates(candidates){
