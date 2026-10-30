@@ -1,3 +1,4 @@
+import {createTraining} from './training.js';
 import {normalize,pickPageId,candidatesFor,photoCandidates,headerTerms,rankCatalogCandidates} from './recognition.js';
 import {createInterface} from './ui.js';
 import {hasLiveCamera,waitForStableVideo} from './camera.js';
@@ -12,7 +13,7 @@ const status=(id,message)=>{$(id).textContent=message;};
 const pause=()=>new Promise(resolve=>setTimeout(resolve,0));
 function setBusy(value){
   busy=value;
-  for(const id of ['pdfFile','cameraButton','photoFile','clearButton','manualButton','matchScope','snapButton','retakeButton','manualOpenButton','refreshAppButton'])$(id).disabled=value;
+  for(const id of ['pdfFile','cameraButton','photoFile','clearButton','manualButton','matchScope','snapButton','retakeButton','manualOpenButton','refreshAppButton','openTrainingButton'])$(id).disabled=value;
   $('recognizeButton').disabled=value||!photoBlob||!catalogs.size;
   $('cameraButton').disabled=value||cameraRequest!==null;
   $('snapButton').disabled=value||hasLiveCamera(stream)&&!cameraReady;
@@ -36,13 +37,17 @@ function loadOcr(){
   });
 }
 function openDb(){return new Promise((resolve,reject)=>{
-  const request=indexedDB.open('pagematch-v1',1);
-  request.onupgradeneeded=()=>request.result.createObjectStore('catalogs',{keyPath:'id'});
-  request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);
+  const request=indexedDB.open('pagematch-v1',2);
+  request.onupgradeneeded=()=>{
+    for(const name of ['catalogs','templates'])if(!request.result.objectStoreNames.contains(name))request.result.createObjectStore(name,{keyPath:'id'});
+  };
+  let blocked=false;
+  request.onblocked=()=>{blocked=true;reject(Error('Close other PageMatch tabs, then refresh to update local storage. Your catalogs are safe.'));};
+  request.onsuccess=()=>{if(blocked){request.result.close();return;}request.result.onversionchange=()=>request.result.close();resolve(request.result);};request.onerror=()=>reject(request.error);
 });}
-function dbRequest(mode,operation){return new Promise((resolve,reject)=>{
-  const tx=db.transaction('catalogs',mode);let result;
-  const request=operation(tx.objectStore('catalogs'));
+function dbRequest(mode,operation,storeName='catalogs'){return new Promise((resolve,reject)=>{
+  const tx=db.transaction(storeName,mode);let result;
+  const request=operation(tx.objectStore(storeName));
   request.onsuccess=()=>{result=request.result;};
   tx.oncomplete=()=>resolve(result);tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||Error('Local storage transaction aborted'));
 });}
@@ -112,7 +117,9 @@ async function showPage(pageNo,id){
   const viewport=page.getViewport({scale:Math.min(1.8,1600/base.width)});
   const canvas=document.createElement('canvas');canvas.width=Math.round(viewport.width);canvas.height=Math.round(viewport.height);
   const label=document.createElement('p');label.className='muted';label.textContent=`Printed page ${id} · PDF page ${pageNo} of ${activePdf.numPages}`;
-  $('pdfPreview').replaceChildren(label,canvas);
+  const extract=document.createElement('button');extract.className='secondary';extract.textContent='Capture fields from this page';
+  const catalogId=activeId;extract.onclick=()=>training.open({catalogId,pageNo});
+  $('pdfPreview').replaceChildren(label,extract,canvas);
   try{renderTask=page.render({canvasContext:canvas.getContext('2d'),viewport});await renderTask.promise;}
   finally{renderTask=null;page.cleanup();}
 }
@@ -299,6 +306,13 @@ const ui=createInterface({
   onCamera:()=>{if($('resultSheet').hidden||$('resultSheet').classList.contains('closing'))requestCamera();},
   onSetup:stopCamera,onRetake:retake
 });
+const training=createTraining({
+  catalogs:()=>[...catalogs.values()],openPdf:async id=>readPdf(await catalogs.get(id).blob.arrayBuffer()),
+  loadTemplates:()=>dbRequest('readonly',store=>store.getAll(),'templates'),
+  saveTemplate:template=>dbRequest('readwrite',store=>store.put(template),'templates'),
+  deleteTemplate:id=>dbRequest('readwrite',store=>store.delete(id),'templates'),
+  onOpen:stopCamera,onCount:count=>status('templateSummary',count?count+' template(s) saved on this device.':'Templates stay on this device.')
+});
 $('pdfFile').onchange=e=>{const file=e.target.files?.[0];if(file)run(()=>indexPdf(file),'catalogStatus');e.target.value='';};
 $('photoFile').onchange=e=>{const file=e.target.files?.[0];if(file)run(()=>usePhoto(file));e.target.value='';};
 $('cameraButton').onclick=requestCamera;
@@ -326,8 +340,8 @@ $('manualButton').onclick=()=>run(async()=>{
 });
 $('manualPage').onkeydown=e=>{if(e.key==='Enter')$('manualButton').click();};
 $('clearButton').onclick=()=>run(async()=>{
-  if(!confirm('Delete all catalog PDFs and indexes saved in this browser?'))return;
-  await dbRequest('readwrite',store=>store.clear());catalogs.clear();activeId=null;
+  if(!confirm('Delete all catalog PDFs, indexes and extraction templates saved in this browser?'))return;
+  await dbRequest('readwrite',store=>store.clear());await dbRequest('readwrite',store=>store.clear(),'templates');await training.refresh();catalogs.clear();activeId=null;
   if(activePdf)await activePdf.destroy();activePdf=null;photoBlob=null;
   $('photoPreview').hidden=true;$('photoPreview').removeAttribute('src');$('pdfPreview').replaceChildren();$('result').textContent='No scan yet.';
   status('catalogStatus','No catalog imported.');status('scanStatus','Import a catalog to begin.');stopCamera();
@@ -362,7 +376,7 @@ $('refreshAppButton').onclick=()=>{
 setBusy(true);
 (async()=>{
   try{
-    db=await openDb();const saved=await dbRequest('readonly',store=>store.getAll());saved.forEach(c=>catalogs.set(c.id,c));
+    db=await openDb();await training.refresh();const saved=await dbRequest('readonly',store=>store.getAll());saved.forEach(c=>catalogs.set(c.id,c));
     if(saved.length)await activate(saved[0].id);
     status('catalogStatus',saved.length?`${saved.length} catalog(s) saved on this device.`:'No catalog imported.');
   }catch(error){status('catalogStatus',`Local storage unavailable: ${error.message}. Enable website storage and reopen.`);}

@@ -34,3 +34,11 @@ Tests cover page matching, catalog disambiguation and gesture thresholds. Browse
 ## Refreshing the app
 
 While online, use **Refresh app** at the bottom of Setup, or open https://thegameonaddict.github.io/PageMatch/?v=0.4.2. This refreshes the application without clearing catalog PDFs or indexes. Each release uses matching versioned scripts, styles and OCR asset paths. Online page navigation checks the server first; offline navigation, including version-query URLs, falls back to the cached app. Do not clear Safari website data to update: that can delete your local catalogs.
+
+## Local extraction templates (v0.5.0)
+
+In Setup, open the template editor, choose a catalog and physical PDF page, then load it. Drag a region, enter a field name (letters, numbers, underscores), and add it. Capture all lines or the first line; an optional literal pattern such as "Part: *" extracts the text in place of the asterisk. Save the template to this browser. Use Move page and zoom for small regions on phones.
+
+Select a saved template and load another physical PDF page to test the same regions. The scan result also offers Capture fields from this page: select your saved template to apply it to that matched page. Review values are editable temporarily; they are not saved as reports. Templates are scoped to the local catalog and persist in IndexedDB alongside the catalog library (schema migration preserves imports).
+
+This release extracts selectable PDF text from fixed normalized regions. It does not train a machine-learning model, align photo regions, detect highlighted rows, or join separate columns into structured table rows. The camera identifies the PDF page, whose text supplies the values. QR generation, report formulas and exports remain future work. No document or extracted value is uploaded. If another older tab blocks the storage update, close the other PageMatch tabs and refresh.

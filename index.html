@@ -15,7 +15,7 @@
   <main id="screens" class="screens">
     <section id="setupScreen" class="screen setup-screen" aria-labelledby="setupTitle">
       <div class="setup-content">
-        <header class="app-header"><a class="brand" href="./" aria-label="PageMatch home"><span class="brand-mark" aria-hidden="true">▣</span> PageMatch</a><span class="version">v0.4.2</span></header>
+        <header class="app-header"><a class="brand" href="./" aria-label="PageMatch home"><span class="brand-mark" aria-hidden="true">▣</span> PageMatch</a><span class="version">v0.5.0</span></header>
         <div class="intro"><p class="eyebrow">YOUR WORKSPACE</p><h1 id="setupTitle">Ready when<br>you are.</h1><p>Your catalogs, on your device.<br>Swipe left when it’s time to scan.</p></div>
         <section class="panel library" aria-labelledby="libraryTitle">
           <div class="section-heading"><div><p class="eyebrow">LOCAL LIBRARY</p><h2 id="libraryTitle">Your catalogs <span id="catalogCount" class="count">0</span></h2></div><label class="import-button" title="Import PDF catalog"><input id="pdfFile" type="file" accept="application/pdf,.pdf"><span aria-hidden="true">＋</span><span>Add PDF</span></label></div>
@@ -24,6 +24,7 @@
           <div id="catalogList"></div>
           <button id="clearButton" class="text-button danger" hidden>Clear saved catalogs</button>
         </section>
+        <section class="panel training-panel" aria-labelledby="trainingTitle"><p class="eyebrow">EXTRACTION TEMPLATES</p><h2 id="trainingTitle">Teach it what to capture.</h2><p class="muted">Mark regions on a PDF page and give each value a name. Reuse your fields on pages with the same layout.</p><button id="openTrainingButton" class="primary">Open template editor</button><p id="templateSummary" class="muted">Templates stay on this device.</p></section>
         <section class="panel future-panel" aria-labelledby="formulasTitle"><div class="section-heading"><div><p class="eyebrow">NEXT IN YOUR WORKFLOW</p><h2 id="formulasTitle">QR & report formulas</h2></div><span class="coming-soon">Coming later</span></div><div class="formula-placeholder" aria-label="Reserved space for QR code and report generation formulas"><span aria-hidden="true">＋</span><p>A space for your formulas.</p><small>QR codes and report generation will live here.</small></div></section>
         <footer class="privacy"><span class="privacy-dot" aria-hidden="true"></span><span id="offlineStatus" role="status">Downloading offline assets…</span><p>PDFs, photos, and recognition stay on this device.</p><button id="refreshAppButton" class="text-button">Refresh app</button></footer>
       </div>
@@ -45,6 +46,19 @@
       </aside>
     </section>
   </main>
+  <dialog id="trainingDialog" class="training-dialog" aria-labelledby="trainingHeading">
+    <header class="training-header"><div><p class="eyebrow">ON-DEVICE EXTRACTION</p><h2 id="trainingHeading">Template editor</h2></div><button id="closeTrainingButton" class="secondary">Done</button></header>
+    <div class="training-content">
+      <div class="training-controls"><label>Saved template<select id="templateChoice"><option value="">New template</option></select></label><label>Template name<input id="templateName" placeholder="e.g. Parts table" maxlength="100"></label><label>Catalog<select id="trainingCatalog"></select></label><div class="training-page-control"><label>PDF page<input id="trainingPage" type="number" min="1" value="1" inputmode="numeric"></label><button id="loadTrainingPage" class="secondary">Load page</button></div></div>
+      <p id="trainingStatus" class="scan-status" role="status">Add a PDF catalog in Setup first.</p>
+      <div class="training-tools"><label>View<select id="trainingZoom"><option value="100">Fit page</option><option value="175">175%</option><option value="250">250%</option></select></label><label>Touch mode<select id="selectionMode"><option value="mark">Mark region</option><option value="move">Move page</option></select></label></div>
+      <p class="muted">Drag around a complete value or column. Use Move page to scroll when zoomed in. Regions repeat at the same position on other pages.</p>
+      <div class="training-scroll"><div id="trainingSurface" class="training-surface" hidden><canvas id="trainingCanvas" aria-label="PDF page for selecting regions"></canvas><div id="regionOverlay" aria-hidden="true"></div></div></div>
+      <section class="field-builder"><h3>Add a field</h3><label>Field name<input id="fieldName" placeholder="e.g. part_number" maxlength="48" autocapitalize="none" spellcheck="false"></label><label>Capture<select id="fieldMode"><option value="all">All lines in region</option><option value="first-line">First line only</option></select></label><label>Text pattern (optional)<input id="fieldPattern" placeholder="e.g. Part: *" maxlength="200" spellcheck="false"></label><p class="muted">Use * for the value to capture. Leave blank to keep all selected text. Select complete text spans.</p><button id="addFieldButton" class="secondary">Add selected region</button></section>
+      <section><h3>Review fields <span id="fieldCount" class="count">0</span></h3><p class="muted">Check every value. A template assumes the same page layout; these regions do not follow highlights or automatically align photos.</p><div id="fieldList"></div></section>
+      <div class="training-save"><button id="saveTemplateButton" class="primary">Save template</button><button id="deleteTemplateButton" class="text-button danger" disabled>Delete template</button></div>
+    </div>
+  </dialog>
   <script type="module" src="./main.js"></script>
 </body>
 </html>

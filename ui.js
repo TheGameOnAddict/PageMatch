@@ -84,6 +84,7 @@ export function createInterface({onCamera,onSetup,onRetake}){
     if(!expanded&&!dragged&&!event.target.closest('button,input,select,a,label'))setExpanded(true);
   });
   document.addEventListener('keydown',event=>{
+    if(document.querySelector('dialog[open]'))return;
     if(event.key==='Escape'&&!$('resultSheet').hidden){
       if(expanded)setExpanded(false);else if(!$('retakeButton').disabled)onRetake();
     }
