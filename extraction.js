@@ -58,11 +58,12 @@ function extractRawField(field,boxes){
     let line=lines.find(l=>Math.abs(l.cy-cy)<Math.min(l.height,b.height)*.55);
     if(!line){line={cy,height:b.height,items:[]};lines.push(line);}line.items.push(b);
   }
-  const text=lines.map(l=>l.items.sort((a,b)=>a.x-b.x).map(b=>b.text).join(' ').trim()).join('\n');
+  const entries=lines.map(l=>({value:l.items.sort((a,b)=>a.x-b.x).map(b=>b.text).join(' ').trim(),y:l.cy,height:l.height,cells:l.items}));
+  const text=entries.map(e=>e.value).join('\n');
   if(!text)return {value:'',status:'No text in region'};
   const input=field.mode==='first-line'?text.split('\n')[0]:text;
   const value=field.pattern?capturePattern(input,field.pattern):input;
-  return value===null?{value:'',status:'Pattern did not match'}:{value,status:'Review value'};
+  return value===null?{value:'',status:'Pattern did not match'}:{value,status:'Review value',...(field.pattern?{}:{entries:field.mode==='first-line'?entries.slice(0,1):entries})};
 }
 
 export function extractField(field,boxes){return refineResult(extractRawField(field,boxes),field.refinement);}

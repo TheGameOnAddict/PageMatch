@@ -1,3 +1,5 @@
+import {renderSavedResults} from './results.js';
+import {textBoxes} from './extraction.js';
 import {createTraining} from './training.js';
 import {normalize,pickPageId,candidatesFor,photoCandidates,headerTerms,rankCatalogCandidates} from './recognition.js';
 import {createInterface} from './ui.js';
@@ -8,8 +10,11 @@ const catalogs=new Map();
 let pdfjs,db,activeId=null,activePdf=null,photoBlob=null,stream=null,busy=false,renderTask=null,cameraSequence=0,cameraRequest=null;
 let cameraReady=false,cameraAbort=null,coverSequence=0;
 const cameraStage=document.querySelector('.camera-stage');
+const scanStatusEl=$('scanStatus');let matchedContext=null,matchedBoxes=[];
+function resetMatch(){matchedContext=null;matchedBoxes=[];$('resultSheet').classList.remove('has-match');$('sheetBody').prepend(scanStatusEl);$('savedPageResults').replaceChildren();}
+
 const hasPhotoCover=()=>!$('photoPreview').hidden&&Boolean($('photoPreview').getAttribute('src'));
-const status=(id,message)=>{$(id).textContent=message;};
+const status=(id,message)=>{(id==='scanStatus'?scanStatusEl:$(id)).textContent=message;};
 const pause=()=>new Promise(resolve=>setTimeout(resolve,0));
 function setBusy(value){
   busy=value;
@@ -108,28 +113,46 @@ function refreshCatalogs(){
 }
 async function run(fn,statusId='scanStatus'){
   if(busy)return;setBusy(true);
-  try{await fn();}catch(error){status(statusId,error.message);if(statusId==='scanStatus'){ui.showSheet();$('sheetTitle').textContent='Try another photo';}}finally{setBusy(false);}
+  try{await fn();}catch(error){status(statusId,error.message);if(statusId==='scanStatus'){resetMatch();$('result').textContent=error.message;$('pdfPreview').replaceChildren();ui.showSheet();$('sheetTitle').textContent='Try another photo';}}finally{setBusy(false);}
 }
 function searchCatalogs(){return $('matchScope').value==='all'?[...catalogs.values()]:[catalogs.get($('matchScope').value)].filter(Boolean);}
+async function refreshSavedResults(){
+  if(!matchedContext)return;
+  const context={...matchedContext};
+  try{
+    const saved=await dbRequest('readonly',store=>store.getAll(),'templates');
+    if(matchedContext?.catalogId!==context.catalogId||matchedContext?.pageNo!==context.pageNo)return;
+    $('savedPageResults').replaceChildren(renderSavedResults({templates:saved.filter(t=>t.catalogId===context.catalogId),boxes:matchedBoxes,
+      onDiscover:()=>training.open(context),onArrange:templateId=>training.open({...context,templateId,tab:'saved'})}));
+  }catch(error){$('savedPageResults').textContent='Saved patterns could not load: '+error.message;}
+}
+function matchBanner(id,pageNo){
+  const details=document.createElement('details');details.className='match-banner';
+  const summary=document.createElement('summary'),title=document.createElement('strong'),catalog=document.createElement('span'),hint=document.createElement('small');
+  title.textContent=id;catalog.textContent=catalogs.get(activeId).name;hint.textContent='Match details';summary.append(title,catalog,hint);
+  const evidence=document.createElement('div');evidence.className='match-evidence';
+  const facts=document.createElement('p');facts.textContent='Printed '+id+' · PDF page '+pageNo+' of '+activePdf.numPages+'. Check the catalog revision before use.';
+  evidence.append(scanStatusEl,facts);details.append(summary,evidence);$('result').replaceChildren(details);$('resultSheet').classList.add('has-match');
+}
 async function showPage(pageNo,id){
   if(!activePdf)return;
   const page=await activePdf.getPage(pageNo),base=page.getViewport({scale:1});
   const viewport=page.getViewport({scale:Math.min(1.8,1600/base.width)});
-  const canvas=document.createElement('canvas');canvas.width=Math.round(viewport.width);canvas.height=Math.round(viewport.height);
-  const label=document.createElement('p');label.className='muted';label.textContent=`Printed page ${id} · PDF page ${pageNo} of ${activePdf.numPages}`;
-  const extract=document.createElement('button');extract.className='secondary';extract.textContent='Find patterns on this page';
-  const catalogId=activeId;extract.onclick=()=>training.open({catalogId,pageNo});
-  $('pdfPreview').replaceChildren(label,extract,canvas);
-  try{renderTask=page.render({canvasContext:canvas.getContext('2d'),viewport});await renderTask.promise;}
-  finally{renderTask=null;page.cleanup();}
+  const canvas=document.createElement('canvas');canvas.width=Math.round(viewport.width);canvas.height=Math.round(viewport.height);canvas.setAttribute('role','img');canvas.setAttribute('aria-label','Matched PDF page '+pageNo);
+  matchedContext={catalogId:activeId,pageNo,printedId:id};$('resultOptions').open=false;$('sheetBody').scrollTop=0;matchBanner(id,pageNo);$('pdfPreview').replaceChildren(canvas);
+  try{
+    renderTask=page.render({canvasContext:canvas.getContext('2d'),viewport});await renderTask.promise;
+    matchedBoxes=textBoxes((await page.getTextContent()).items,base,pdfjs.Util.transform);await refreshSavedResults();
+  }finally{renderTask=null;page.cleanup();}
 }
 async function useCandidate(candidate){
+  const evidence=scanStatusEl.textContent;resetMatch();
   if(activeId!==candidate.catalog.id)await activate(candidate.catalog.id);
   const box=document.createElement('div');box.className='match'+(candidate.score||candidate.pages.length>1?' warning':'');
   const title=document.createElement('strong'),small=document.createElement('small');title.textContent=candidate.id;
   small.textContent=`${candidate.catalog.name} · PDF page ${candidate.pages.join(', ')}${candidate.score?' · approximate match: verify carefully':''}`;
   box.append(title,small);$('result').replaceChildren(box);$('pdfPreview').replaceChildren();
-  $('sheetTitle').textContent='Page found';
+  status('scanStatus',evidence);$('sheetTitle').textContent='Matched page';
   if(candidate.pages.length===1)await showPage(candidate.pages[0],candidate.id);
   else{
     const label=document.createElement('p');label.textContent='This printed ID occurs more than once. Choose a PDF page:';$('result').append(label);
@@ -137,7 +160,7 @@ async function useCandidate(candidate){
   }
 }
 function showCandidates(candidates){
-  $('pdfPreview').replaceChildren();const root=$('result');root.replaceChildren();
+  resetMatch();$('pdfPreview').replaceChildren();const root=$('result');root.replaceChildren();
   $('sheetTitle').textContent=candidates.length?'Choose a match':'No match yet';
   if(!candidates.length){root.textContent='No indexed match. Retake a straight, sharp photo including the footer, or enter the printed ID below.';return;}
   const label=document.createElement('p');label.textContent='Choose and verify a possible match. Catalog revisions may share printed IDs.';root.append(label);
@@ -235,7 +258,7 @@ async function recognize(){
     if(candidates.length===1&&candidates[0].score===0&&candidates[0].pages.length===1&&!conflict){
       await useCandidate(candidates[0]);
       const confirmed=ranking.evidence.find(e=>e.candidate===candidates[0])?.confirmed;
-      status('scanStatus',`Read ${candidates[0].id}. ${ranking.reason?'Catalog matched by '+ranking.reason+'.':confirmed?'Catalog model/header confirmed.':'Catalog is based on your search selection / page index; header not confirmed.'} Verify the preview and catalog revision.`);
+      status('scanStatus',`Read ${candidates[0].id}. ${ranking.reason?'Catalog matched by '+ranking.reason+'.':confirmed?'Catalog model/header confirmed.':'Catalog is based on your search selection / page index; header not confirmed.'} Verify the preview and catalog revision. Footer OCR: ${recognizedText}. Header OCR: ${headerText}.`);
     }else{
       showCandidates(candidates);
       status('scanStatus',`Footer OCR: ${recognizedText}. ${conflict?'Header model conflicts with the catalog. ':''}Header read: ${headerText}. ${ranking.evidence.some(e=>e.confirmed)?'Matching model/header; revision or page still needs confirmation.':'No distinctive model/name confirmed. Generic manufacturer words do not identify the catalog.'} Select a match or use manual lookup.`);
@@ -289,7 +312,7 @@ function requestCamera(){
   });
 }
 async function scanCurrentPhoto(){
-  ui.showSheet();$('sheetTitle').textContent='Reading your page…';
+  resetMatch();ui.showSheet();$('sheetTitle').textContent='Reading your page…';
   $('result').textContent='Matching against '+($('matchScope').value==='all'?'all your catalogs.':'your chosen catalog.');$('pdfPreview').replaceChildren();
   if(!catalogs.size){$('sheetTitle').textContent='Add a catalog first';$('result').textContent='Go to Setup and add your PDF catalog. Then take or choose a photo to find its page.';status('scanStatus','Your library is empty.');return;}
   await recognize();
@@ -299,7 +322,7 @@ function retake(){
   if(busy)return;
   // Keep the decoded photo in place until a settled live frame can replace it.
   photoBlob=null;$('recognizeButton').disabled=true;
-  ui.closeSheet().then(closed=>{if(closed){$('pdfPreview').replaceChildren();$('result').textContent='Take a picture to find your page.';}});
+  ui.closeSheet().then(closed=>{if(closed){resetMatch();$('pdfPreview').replaceChildren();$('result').textContent='Take a picture to find your page.';}});
   requestCamera();
 }
 const ui=createInterface({
@@ -311,7 +334,7 @@ const training=createTraining({
   loadTemplates:()=>dbRequest('readonly',store=>store.getAll(),'templates'),
   saveTemplate:template=>dbRequest('readwrite',store=>store.put(template),'templates'),
   deleteTemplate:id=>dbRequest('readwrite',store=>store.delete(id),'templates'),
-  onOpen:stopCamera,onCount:count=>status('templateSummary',count?count+' pattern set(s) saved on this device.':'Templates stay on this device.')
+  onOpen:stopCamera,onClose:refreshSavedResults,onCount:count=>status('templateSummary',count?count+' pattern set(s) saved on this device.':'Templates stay on this device.')
 });
 $('pdfFile').onchange=e=>{const file=e.target.files?.[0];if(file)run(()=>indexPdf(file),'catalogStatus');e.target.value='';};
 $('photoFile').onchange=e=>{const file=e.target.files?.[0];if(file)run(()=>usePhoto(file));e.target.value='';};
@@ -330,7 +353,7 @@ $('snapButton').onclick=()=>{
 $('recognizeButton').onclick=()=>run(scanCurrentPhoto);
 $('matchScope').onchange=()=>{if(photoBlob&&!$('resultSheet').hidden)run(scanCurrentPhoto);};
 $('manualOpenButton').onclick=()=>{
-  ui.showSheet(true);$('sheetTitle').textContent='Find a printed page';
+  resetMatch();$('result').textContent='Enter the printed page ID below.';$('pdfPreview').replaceChildren();ui.showSheet(true);$('resultOptions').open=true;$('sheetTitle').textContent='Find a printed page';
   status('scanStatus','Enter the ID printed on the paper page.');$('manualPage').focus();
 };
 $('manualButton').onclick=()=>run(async()=>{
@@ -341,7 +364,7 @@ $('manualButton').onclick=()=>run(async()=>{
 $('manualPage').onkeydown=e=>{if(e.key==='Enter')$('manualButton').click();};
 $('clearButton').onclick=()=>run(async()=>{
   if(!confirm('Delete all catalog PDFs, indexes and extraction templates saved in this browser?'))return;
-  await dbRequest('readwrite',store=>store.clear());await dbRequest('readwrite',store=>store.clear(),'templates');await training.refresh();catalogs.clear();activeId=null;
+  await dbRequest('readwrite',store=>store.clear());await dbRequest('readwrite',store=>store.clear(),'templates');await training.refresh();resetMatch();catalogs.clear();activeId=null;
   if(activePdf)await activePdf.destroy();activePdf=null;photoBlob=null;
   $('photoPreview').hidden=true;$('photoPreview').removeAttribute('src');$('pdfPreview').replaceChildren();$('result').textContent='No scan yet.';
   status('catalogStatus','No catalog imported.');status('scanStatus','Import a catalog to begin.');stopCamera();

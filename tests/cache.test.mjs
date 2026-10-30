@@ -39,9 +39,10 @@ test('build versions the complete module chain and offline OCR asset paths',()=>
   const main=readFileSync(new URL('main.js',output),'utf8');
   const precache=JSON.parse(readFileSync(new URL('precache.json',output),'utf8'));
   const hash=html.match(/main\.js\?build=([a-f0-9]{16})/)?.[1];assert.ok(hash);
-  for(const file of ['styles.css','main.js','recognition.js','ui.js','camera.js','training.js','extraction.js','patterns.js','refinement.js','refinement-ui.js','manifest.webmanifest'])assert.ok(precache.includes('./'+file+'?build='+hash),file);
+  for(const file of ['styles.css','main.js','recognition.js','ui.js','camera.js','training.js','extraction.js','patterns.js','refinement.js','refinement-ui.js','records.js','records-ui.js','structure-ui.js','results.js','manifest.webmanifest'])assert.ok(precache.includes('./'+file+'?build='+hash),file);
   for(const file of ['recognition.js','ui.js','camera.js','training.js'])assert.ok(main.includes('./'+file+'?build='+hash),file);
   assert.ok(!main.includes('./vendor/'));
+  for(const name of ['records.js','records-ui.js','structure-ui.js','results.js']){const module=readFileSync(new URL(name,output),'utf8');for(const [,target] of module.matchAll(/from ['"]\.\/([^'"]+)['"]/g))assert.ok(target.endsWith('?build='+hash),name+' -> '+target);}
   const training=readFileSync(new URL('training.js',output),'utf8');
   assert.ok(training.includes('./extraction.js?build='+hash));
   assert.ok(training.includes('./patterns.js?build='+hash));

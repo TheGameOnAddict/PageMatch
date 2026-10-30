@@ -33,7 +33,7 @@ Tests cover page matching, catalog disambiguation and gesture thresholds. Browse
 
 ## Refreshing the app
 
-While online, use **Refresh app** at the bottom of Setup, or open https://thegameonaddict.github.io/PageMatch/?v=0.7.0. This refreshes the application without clearing catalog PDFs or indexes. Each release uses matching versioned scripts, styles and OCR asset paths. Online page navigation checks the server first; offline navigation, including version-query URLs, falls back to the cached app. Do not clear Safari website data to update: that can delete your local catalogs.
+While online, use **Refresh app** at the bottom of Setup, or open https://thegameonaddict.github.io/PageMatch/?v=0.8.0. This refreshes the application without clearing catalog PDFs or indexes. Each release uses matching versioned scripts, styles and OCR asset paths. Online page navigation checks the server first; offline navigation, including version-query URLs, falls back to the cached app. Do not clear Safari website data to update: that can delete your local catalogs.
 
 ## Suggested extraction patterns (v0.6.0)
 
@@ -50,3 +50,13 @@ Older region templates remain available under Other saved pattern sets. All impo
 Tap Refine on a suggestion or a saved pattern. Mark correct examples Keep and wrong examples Not this. The preview shows kept, review and excluded counts before you save. On suggestions, Use this refinement updates the preview; Name & confirm saves the pattern and teaching together. Saved patterns offer Save refinement directly.
 
 Exact rejected examples are excluded. Two distinct kept/rejected examples with the same character-and-length format teach that format for subsequent pages. Unfamiliar or conflicting formats remain visible for review; explicit kept exceptions take priority. This is local example-based format filtering, not semantic proof that a value is a valid part. Excluded values remain inspectable and teachable. Clear teaching and save to undo the filter. No PDF, photo or teaching examples leave the browser.
+
+## Split patterns and arrange page results (v0.8.0)
+
+In a saved pattern, Separate can split every line into two fields using words or a literal delimiter, or move selected whole examples into a separate pattern. The preview shows both pieces; short/unsplit values can be assigned to either side. Originals remain as hidden source patterns, so derived patterns can be split further without losing their source. Whole-value separation reuses exact examples and formats supported by two distinct examples.
+
+Arrange page results lets users choose ordered group levels (for example Figure then Index), choose the field that starts each record, select/reorder the displayed fields and choose whether groups start at every marker or only a changed marker. Blank group markers continue within the current page; leading rows with no marker are flagged Unassigned. Group nesting is user-defined, with up to eight levels. Save an arrangement to apply it automatically below the matched PDF preview. Refinements preserve it; excluded anchor rows are omitted without shifting neighboring descriptions/quantities. Missing cells stay blank, and a rejected group marker creates an unassigned boundary rather than joining a previous group.
+
+Page-match results open expanded, can swipe down to half height, and show a compact expandable catalog/page banner. Match details contain the OCR evidence and physical PDF page. The PDF is followed by all visible saved catalog patterns or their saved arrangements. Discover more patterns opens suggestions; Arrange or refine opens the correct saved set. Changes refresh the underlying result on closing the editor. Scan options are tucked away.
+
+This is geometric row association for selectable PDF text, not automatic semantic understanding of every table. Preview the arrangement against the source page. No guessing by zipping arrays with missing cells. Header/label patterns lacking row geometry are not used to fabricate records. All documents, layouts, teaching and extracted values remain local.

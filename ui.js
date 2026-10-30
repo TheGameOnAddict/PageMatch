@@ -25,7 +25,7 @@ export function createInterface({onCamera,onSetup,onRetake}){
     $('sheetExpandLabel').textContent=value?'Swipe down to minimize':'Tap or swipe up ↗';
     if(!value)$('sheetBody').scrollTop=0;
   }
-  function showSheet(expand=false){
+  function showSheet(expand=true){
     if(closeTimer!==null){clearTimeout(closeTimer);closeTimer=null;finishClose?.(false);finishClose=null;}
     $('resultSheet').classList.remove('closing');
     $('resultSheet').hidden=false;setExpanded(expand);

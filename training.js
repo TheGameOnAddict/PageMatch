@@ -1,8 +1,10 @@
+import {extractFields} from './records.js';
+import {createSeparator,createLayoutEditor} from './structure-ui.js';
 import {createRefiner} from './refinement-ui.js';
 import {refineValues} from './refinement.js';
 import {textBoxes,extractField} from './extraction.js';
 import {discoverPatterns,ruleKey} from './patterns.js';
-export function createTraining({catalogs,openPdf,loadTemplates,saveTemplate,onOpen,onCount}){
+export function createTraining({catalogs,openPdf,loadTemplates,saveTemplate,onOpen,onCount,onClose}){
  const $=id=>document.getElementById(id),dialog=$('trainingDialog');
  let templates=[],fields=[],suggestions=[],boxes=[],doc=null,currentCatalog=null,currentPage=null,templateId=null,working=false,context={},activeList='suggestions';
  const message=text=>{$('trainingStatus').textContent=text;};
@@ -16,10 +18,10 @@ export function createTraining({catalogs,openPdf,loadTemplates,saveTemplate,onOp
  async function refresh(){templates=await loadTemplates();options();}
  function lock(value){working=value;for(const e of dialog.querySelectorAll('button,input,select'))e.disabled=value;}
  async function task(fn){if(working)return;lock(true);try{await fn();}catch(e){message(e.message);}finally{lock(false);}}
- async function persist(next){
+ async function persist(next,arrangement=undefined){
   const existing=templates.find(t=>t.id===templateId);
   const catalog=catalogs().find(c=>c.id===currentCatalog);
-  const item={id:templateId||crypto.randomUUID(),name:existing?.name||catalog.name+' patterns',catalogId:currentCatalog,pageNo:currentPage,fields:next,schemaVersion:2,updatedAt:new Date().toISOString()};
+  const item={...existing,id:templateId||crypto.randomUUID(),name:existing?.name||catalog.name+' patterns',catalogId:currentCatalog,pageNo:currentPage,fields:next,layout:arrangement===undefined?existing?.layout:arrangement,schemaVersion:3,updatedAt:new Date().toISOString()};
   await saveTemplate(item);templateId=item.id;fields=next;await refresh();
  }
  function showValues(parent,values){
@@ -63,8 +65,13 @@ export function createTraining({catalogs,openPdf,loadTemplates,saveTemplate,onOp
   }
   const confirmed=$('confirmedPatterns');confirmed.replaceChildren();$('confirmedCount').textContent=fields.length;
   if(!fields.length)confirmed.append(el('p','Patterns you confirm will save here automatically.','muted'));
+  const extracted=extractFields(fields,boxes);
+  const arrangement=templates.find(t=>t.id===templateId)?.layout;
+  const arrangementHost=el('div');
+  if(fields.length)confirmed.append(button('Arrange page results',()=>{arrangementHost.replaceChildren(createLayoutEditor({fields,boxes,layout:arrangement,onApply:layout=>task(async()=>{await persist(fields,layout);render();message('Page arrangement saved.');}),onCancel:()=>arrangementHost.replaceChildren()}));}),arrangementHost);
+  if(arrangement)confirmed.append(button('Use separate pattern lists',()=>task(async()=>{await persist(fields,null);render();message('Showing separate pattern lists again.');}),'text-button'));
   for(const field of fields){
-   const result=extractField(field,boxes),values=result.values||result.value.split('\n').filter(Boolean),card=el('article',undefined,'pattern-card confirmed-pattern');
+   const result=extracted.get(field.name),values=result.values||result.value.split('\n').filter(Boolean),card=el('article',undefined,'pattern-card confirmed-pattern');
    card.append(el('p',result.rawValues?.length||result.value?'SAVED · CHECK VALUES':'SAVED · NOT FOUND HERE','eyebrow'),el('h3',field.displayName||field.name));
    if(field.refinement)card.append(el('p',result.status,'refine-summary'));
    if(values.length){const detail=el('details');detail.append(el('summary',values.length+' value(s) · '+values[0].slice(0,90)));showValues(detail,values);card.append(detail);}
@@ -79,7 +86,23 @@ export function createTraining({catalogs,openPdf,loadTemplates,saveTemplate,onOp
       await persist(fields.map(f=>f.name===field.name?next:f));render();message('Refinement saved. It will apply when this pattern is used on other pages.');
      }),onCancel:()=>refinementHost.replaceChildren()}));
    }));card.append(refinementHost);
-   card.append(button('Remove pattern',()=>task(async()=>{await persist(fields.filter(f=>f.name!==field.name));render();message('Pattern removed from this saved set.');}),'text-button'));
+   card.append(button('Separate',()=>{
+    refinementHost.replaceChildren(createSeparator({field,fields,results:extracted,onApply:(next,children)=>task(async()=>{
+     const layout=arrangement?{...arrangement,fields:arrangement.fields.flatMap(n=>n===field.name?children:[n])}:undefined;
+     await persist(next,layout);render();message('Separate patterns saved. The original is retained as their source.');
+    }),onCancel:()=>refinementHost.replaceChildren()}));
+   }));
+   card.append(button(field.hidden?'Show on page':'Hide from page',()=>task(async()=>{
+    let layout=arrangement?structuredClone(arrangement):undefined;
+    if(layout){layout.fields=field.hidden?[...new Set([...layout.fields,field.name])]:layout.fields.filter(n=>n!==field.name);if(!layout.fields.length)throw Error('Keep at least one field in the arrangement.');}
+    await persist(fields.map(f=>f.name===field.name?{...f,hidden:!f.hidden}:f),layout);render();
+   }),'text-button'));
+   if(field.source)card.append(el('small','Derived from '+(fields.find(f=>f.name===field.source)?.displayName||field.source),'muted'));
+   card.append(button('Remove pattern',()=>task(async()=>{
+    if(fields.some(f=>f.source===field.name))throw Error('This is a source for split patterns. Remove its derived patterns first.');
+    if(arrangement&&(arrangement.anchor===field.name||arrangement.fields.includes(field.name)||arrangement.levels.some(l=>l.field===field.name)))throw Error('This pattern is in the page arrangement. Change the arrangement first.');
+    await persist(fields.filter(f=>f.name!==field.name));render();message('Pattern removed from this saved set.');
+   }),'text-button'));
    confirmed.append(card);
   }
  }
@@ -96,7 +119,7 @@ export function createTraining({catalogs,openPdf,loadTemplates,saveTemplate,onOp
   // Validate the requested page before changing the current selection.
   let n=pageNumber(catalog,$('trainingPage').value);
   if(currentCatalog!==id||!doc){await doc?.destroy();doc=await openPdf(id);currentCatalog=id;fields=[];}
-  const chosen=templates.find(t=>t.id===templateId&&t.catalogId===id)||templates.find(t=>t.catalogId===id&&t.schemaVersion===2);
+  const chosen=templates.find(t=>t.id===templateId&&t.catalogId===id)||templates.find(t=>t.catalogId===id&&t.schemaVersion>=2);
   templateId=chosen?.id||null;fields=structuredClone(chosen?.fields||[]);currentPage=null;boxes=[];suggestions=[];$('pagePreviewDetails').hidden=true;render();
   if(n===null){
    const pages=[...new Set(Object.values(catalog.index).flat())].sort((a,b)=>a-b).slice(0,20);if(!pages.length)pages.push(1);
@@ -120,10 +143,10 @@ export function createTraining({catalogs,openPdf,loadTemplates,saveTemplate,onOp
   $('trainingCatalog').replaceChildren(...catalogs().map(c=>new Option(c.name,c.id)));
   if(initial.catalogId)$('trainingCatalog').value=initial.catalogId;
   $('trainingPage').value=initial.pageNo||'';dialog.showModal();
-  await task(async()=>{await refresh();templateId=null;fields=[];suggestions=[];boxes=[];render();if(catalogs().length)await scan();else message('Add a PDF catalog in Setup first.');});
+  await task(async()=>{await refresh();templateId=initial.templateId||null;fields=[];suggestions=[];boxes=[];render();if(catalogs().length)await scan();else message('Add a PDF catalog in Setup first.');if(initial.tab==='saved'){showList('confirmed');if(initial.arrange)$('confirmedPatterns').querySelector('button')?.click();}});
  }
  $('openTrainingButton').onclick=()=>open();
- $('closeTrainingButton').onclick=()=>{if(working)return;dialog.close();doc?.destroy();doc=null;currentCatalog=null;currentPage=null;$('trainingCanvas').width=$('trainingCanvas').height=1;};
+ $('closeTrainingButton').onclick=()=>{if(working)return;dialog.close();doc?.destroy();doc=null;currentCatalog=null;currentPage=null;$('trainingCanvas').width=$('trainingCanvas').height=1;Promise.resolve(onClose?.()).catch(e=>message(e.message));};
  dialog.addEventListener('cancel',e=>{e.preventDefault();$('closeTrainingButton').click();});dialog.addEventListener('keydown',e=>e.stopPropagation());
  $('loadTrainingPage').onclick=()=>task(scan);
  $('trainingPage').onkeydown=e=>{if(e.key==='Enter')task(scan);};

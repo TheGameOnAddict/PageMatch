@@ -15,7 +15,7 @@
   <main id="screens" class="screens">
     <section id="setupScreen" class="screen setup-screen" aria-labelledby="setupTitle">
       <div class="setup-content">
-        <header class="app-header"><a class="brand" href="./" aria-label="PageMatch home"><span class="brand-mark" aria-hidden="true">▣</span> PageMatch</a><span class="version">v0.7.0</span></header>
+        <header class="app-header"><a class="brand" href="./" aria-label="PageMatch home"><span class="brand-mark" aria-hidden="true">▣</span> PageMatch</a><span class="version">v0.8.0</span></header>
         <div class="intro"><p class="eyebrow">YOUR WORKSPACE</p><h1 id="setupTitle">Ready when<br>you are.</h1><p>Your catalogs, on your device.<br>Swipe left when it’s time to scan.</p></div>
         <section class="panel library" aria-labelledby="libraryTitle">
           <div class="section-heading"><div><p class="eyebrow">LOCAL LIBRARY</p><h2 id="libraryTitle">Your catalogs <span id="catalogCount" class="count">0</span></h2></div><label class="import-button" title="Import PDF catalog"><input id="pdfFile" type="file" accept="application/pdf,.pdf"><span aria-hidden="true">＋</span><span>Add PDF</span></label></div>
@@ -42,7 +42,7 @@
       <canvas id="photoCanvas" hidden></canvas>
       <aside id="resultSheet" class="result-sheet" role="dialog" aria-modal="false" aria-labelledby="sheetTitle" hidden>
         <div class="sheet-header"><button id="sheetExpandButton" class="sheet-expander" aria-label="Expand results" aria-expanded="false"><span class="grabber" aria-hidden="true"></span><span class="sheet-heading"><span class="eyebrow">PAGE MATCH</span><span id="sheetTitle">Your result</span></span><span id="sheetExpandLabel" class="expand-label">Tap or swipe up ↗</span></button><button id="retakeButton" class="retake-button" aria-label="Close results and retake picture">Retake</button></div>
-        <div id="sheetBody" class="sheet-body"><div id="scanStatus" class="scan-status" role="status">Ready to scan.</div><div id="result" class="result">Take a picture to find your page.</div><div id="pdfPreview"></div><div class="result-actions"><button id="recognizeButton" class="secondary" disabled>Scan again</button></div><div class="manual"><label for="manualPage">Enter or correct a printed page ID</label><div class="actions"><input id="manualPage" placeholder="e.g. 1H18" spellcheck="false" autocapitalize="characters"><button id="manualButton" class="secondary">Find page</button></div></div><p class="verification-note">Check the catalog revision and PDF preview before using the result.</p></div>
+        <div id="sheetBody" class="sheet-body"><div id="scanStatus" class="scan-status" role="status">Ready to scan.</div><div id="result" class="result">Take a picture to find your page.</div><div id="pdfPreview"></div><div id="savedPageResults"></div><details id="resultOptions" class="result-options"><summary>Scan options</summary><div class="result-actions"><button id="recognizeButton" class="secondary" disabled>Scan again</button></div><div class="manual"><label for="manualPage">Enter or correct a printed page ID</label><div class="actions"><input id="manualPage" placeholder="e.g. 1H18" spellcheck="false" autocapitalize="characters"><button id="manualButton" class="secondary">Find page</button></div></div><p class="verification-note">Check the catalog revision and PDF preview before using the result.</p></details></div>
       </aside>
     </section>
   </main>

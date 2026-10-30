@@ -10,7 +10,7 @@ export function pageLines(boxes){
 export function ruleKey(rule){return rule.kind+':'+(rule.header||rule.label||rule.zone||Math.round((rule.anchor||0)*100));}
 export function discoverPatterns(boxes){
  const lines=pageLines(boxes),found=[];
- const add=(title,reason,rule,values)=>{if(values.length)found.push({title,reason,rule,values});};
+ const add=(title,reason,rule,values,entries=[])=>{if(values.length)found.push({title,reason,rule,values,entries});};
  // Repeated baselines with several separate cells provide evidence of a table.
  let run=[],runs=[];
  for(const line of lines){
@@ -29,9 +29,10 @@ export function discoverPatterns(boxes){
    const left=i?((Math.max(...columns[i-1].items.map(b=>b.x+b.width))+col.x)/2):0;
    const bound=i+1<columns.length?(right+columns[i+1].x)/2:Math.min(1,right+.04);
    const header=lines.filter(l=>l.cy<start-.008&&l.cy>start-.075).flatMap(l=>l.items).filter(b=>b.x+b.width/2>=left&&b.x+b.width/2<bound).map(b=>b.text).join(' ').trim();
-   const values=body.map(l=>l.items.filter(b=>b.x+b.width/2>=left&&b.x+b.width/2<bound).map(b=>b.text).join(' ')).filter(Boolean);
+   const entries=body.map(l=>{const cells=l.items.filter(b=>b.x+b.width/2>=left&&b.x+b.width/2<bound);return {value:cells.map(b=>b.text).join(' '),y:l.cy,height:l.height,cells};});
+   const values=entries.map(e=>e.value).filter(Boolean);
    // Columns are suggested even when all values repeat (e.g. quantities).
-   add(header||'Repeated column '+(i+1),'Repeated column · '+values.length+' values',{kind:'column',header:clean(header),anchor:col.x},values);
+   add(header||'Repeated column '+(i+1),'Repeated column · '+values.length+' values',{kind:'column',header:clean(header),anchor:col.x},values,entries);
   });
  }
  const labels=new Map();
@@ -54,5 +55,5 @@ export function extractRule(rule,boxes){
   // A known column label must still be present; never fall back onto an unrelated diagram.
   match=rule.header?columns.filter(c=>c.rule.header===rule.header).sort((a,b)=>Math.abs(a.rule.anchor-rule.anchor)-Math.abs(b.rule.anchor-rule.anchor))[0]:columns.find(c=>!c.rule.header&&Math.abs(c.rule.anchor-rule.anchor)<.025);
  }else match=candidates.find(c=>ruleKey(c.rule)===ruleKey(rule));
- return match?{value:match.values.join('\n'),values:match.values,status:'Review values'}:{value:'',values:[],status:'Pattern not found on this page'};
+ return match?{value:match.values.join('\n'),values:match.values,entries:match.entries,status:'Review values'}:{value:'',values:[],status:'Pattern not found on this page'};
 }

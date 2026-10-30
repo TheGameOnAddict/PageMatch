@@ -33,5 +33,6 @@ export function refineValues(values,teaching){
 export function refineResult(result,teaching){
  if(!teaching?.keep?.length&&!teaching?.reject?.length)return result;
  const rawValues=result.values||result.value.split('\n').filter(Boolean),filtered=refineValues(rawValues,teaching);
- return {...result,rawValues,...filtered,value:filtered.values.join('\n'),status:rawValues.length?filtered.kept+' kept · '+filtered.review+' to review · '+filtered.excluded.length+' excluded':result.status};
+ const rawEntries=result.entries||[];const rejected=new Set(filtered.excluded.map(r=>normalize(r.value)));
+ return {...result,rawValues,rawEntries,entries:rawEntries.filter(e=>!rejected.has(normalize(e.value))),excludedEntries:[...(result.excludedEntries||[]),...rawEntries.filter(e=>rejected.has(normalize(e.value)))],...filtered,value:filtered.values.join('\n'),status:rawValues.length?filtered.kept+' kept · '+filtered.review+' to review · '+filtered.excluded.length+' excluded':result.status};
 }
