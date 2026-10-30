@@ -1,3 +1,5 @@
+import {createRefiner} from './refinement-ui.js';
+import {refineValues} from './refinement.js';
 import {textBoxes,extractField} from './extraction.js';
 import {discoverPatterns,ruleKey} from './patterns.js';
 export function createTraining({catalogs,openPdf,loadTemplates,saveTemplate,onOpen,onCount}){
@@ -36,8 +38,10 @@ export function createTraining({catalogs,openPdf,loadTemplates,saveTemplate,onOp
   for(const proposal of useful){
    const card=el('article',undefined,'pattern-card');
    card.append(el('p',proposal.reason,'eyebrow'),el('h3',proposal.title));
-   const samples=el('div',undefined,'pattern-samples');proposal.values.slice(0,3).forEach(v=>samples.append(el('p',v)));card.append(samples);
-   const detail=el('details');detail.append(el('summary','See all '+proposal.values.length+' values'));showValues(detail,proposal.values);card.append(detail);
+   const preview=proposal.refinement?refineValues(proposal.values,proposal.refinement):null,shown=preview?.values||proposal.values;
+   const samples=el('div',undefined,'pattern-samples');shown.slice(0,3).forEach(v=>samples.append(el('p',v)));card.append(samples);
+   if(preview)card.append(el('p',preview.kept+' kept · '+preview.review+' to review · '+preview.excluded.length+' excluded','refine-summary'));
+   const detail=el('details');detail.append(el('summary','See all '+shown.length+' values'));showValues(detail,shown);card.append(detail);
    const naming=el('div',undefined,'pattern-naming');naming.hidden=true;
    const label=el('label','What should we call this?'),input=el('input');input.value=proposal.title.slice(0,48);input.maxLength=48;input.setAttribute('aria-label','Name for '+proposal.title);label.append(input);
    naming.append(label,button('Confirm & save',()=>task(async()=>{
@@ -45,19 +49,36 @@ export function createTraining({catalogs,openPdf,loadTemplates,saveTemplate,onOp
     if(fields.some(f=>(f.displayName||f.name).toLowerCase()===displayName.toLowerCase()))throw Error('That name is already used. Choose a different name.');
     let name=displayName.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'').slice(0,40)||'field';if(!/^[a-z]/.test(name))name='field_'+name;
     const base=name;let n=2;while(fields.some(f=>f.name===name))name=base+'_'+n++;
-    await persist([...fields,{name,displayName,rule:proposal.rule}]);render();$('patternNotice').hidden=false;$('patternNotice').textContent='✓ Saved “'+displayName+'”. Tap Saved to review it.';message('Saved “'+displayName+'” on this device. Try it on another page.');
+    await persist([...fields,{name,displayName,rule:proposal.rule,...(proposal.refinement?{refinement:proposal.refinement}:{})}]);render();$('patternNotice').hidden=false;$('patternNotice').textContent='✓ Saved “'+displayName+'”. Tap Saved to review it.';message('Saved “'+displayName+'” on this device. Try it on another page.');
    }),'primary'));
    const choose=button('Name & confirm',()=>{naming.hidden=false;choose.hidden=true;input.focus();});
    const actions=el('div',undefined,'pattern-actions');actions.append(choose,button('Skip',()=>{suggestions=suggestions.filter(p=>p.key!==proposal.key);render();},'text-button'));
-   card.append(actions,naming);root.append(card);
+   const refinementHost=el('div');
+   actions.append(button('Refine',()=>{
+    if(refinementHost.childElementCount){refinementHost.replaceChildren();return;}
+    refinementHost.append(createRefiner({name:proposal.title,values:proposal.values,teaching:proposal.refinement,saveLabel:'Use this refinement',
+     onApply:refinement=>{proposal.refinement=refinement;render();message('Refinement preview updated. Name and confirm this pattern to save it.');},onCancel:()=>refinementHost.replaceChildren()}));
+   }));
+   card.append(actions,refinementHost,naming);root.append(card);
   }
   const confirmed=$('confirmedPatterns');confirmed.replaceChildren();$('confirmedCount').textContent=fields.length;
   if(!fields.length)confirmed.append(el('p','Patterns you confirm will save here automatically.','muted'));
   for(const field of fields){
    const result=extractField(field,boxes),values=result.values||result.value.split('\n').filter(Boolean),card=el('article',undefined,'pattern-card confirmed-pattern');
-   card.append(el('p',result.value?'SAVED · CHECK VALUES':'SAVED · NOT FOUND HERE','eyebrow'),el('h3',field.displayName||field.name));
+   card.append(el('p',result.rawValues?.length||result.value?'SAVED · CHECK VALUES':'SAVED · NOT FOUND HERE','eyebrow'),el('h3',field.displayName||field.name));
+   if(field.refinement)card.append(el('p',result.status,'refine-summary'));
    if(values.length){const detail=el('details');detail.append(el('summary',values.length+' value(s) · '+values[0].slice(0,90)));showValues(detail,values);card.append(detail);}
    else card.append(el('p',result.status,'muted'));
+   if(result.excluded?.length){const excluded=el('details');excluded.append(el('summary',result.excluded.length+' excluded value(s)'));showValues(excluded,result.excluded.map(r=>r.value+' — '+r.reason));card.append(excluded);}
+   const refinementHost=el('div');
+   card.append(button('Refine',()=>{
+    if(refinementHost.childElementCount){refinementHost.replaceChildren();return;}
+    refinementHost.append(createRefiner({name:field.displayName||field.name,values:result.rawValues||result.values||result.value.split('\n').filter(Boolean),teaching:field.refinement,
+     onApply:refinement=>task(async()=>{
+      const next={...field};if(refinement.keep.length||refinement.reject.length)next.refinement=refinement;else delete next.refinement;
+      await persist(fields.map(f=>f.name===field.name?next:f));render();message('Refinement saved. It will apply when this pattern is used on other pages.');
+     }),onCancel:()=>refinementHost.replaceChildren()}));
+   }));card.append(refinementHost);
    card.append(button('Remove pattern',()=>task(async()=>{await persist(fields.filter(f=>f.name!==field.name));render();message('Pattern removed from this saved set.');}),'text-button'));
    confirmed.append(card);
   }

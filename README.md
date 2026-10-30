@@ -33,7 +33,7 @@ Tests cover page matching, catalog disambiguation and gesture thresholds. Browse
 
 ## Refreshing the app
 
-While online, use **Refresh app** at the bottom of Setup, or open https://thegameonaddict.github.io/PageMatch/?v=0.6.0. This refreshes the application without clearing catalog PDFs or indexes. Each release uses matching versioned scripts, styles and OCR asset paths. Online page navigation checks the server first; offline navigation, including version-query URLs, falls back to the cached app. Do not clear Safari website data to update: that can delete your local catalogs.
+While online, use **Refresh app** at the bottom of Setup, or open https://thegameonaddict.github.io/PageMatch/?v=0.7.0. This refreshes the application without clearing catalog PDFs or indexes. Each release uses matching versioned scripts, styles and OCR asset paths. Online page navigation checks the server first; offline navigation, including version-query URLs, falls back to the cached app. Do not clear Safari website data to update: that can delete your local catalogs.
 
 ## Suggested extraction patterns (v0.6.0)
 
@@ -44,3 +44,9 @@ Suggestions show repeated table columns, colon-labeled values, headings and bott
 Confirmed column rules rediscover matching headers on the next page, including when columns shift horizontally. A missing pattern is shown explicitly. Detection is a local heuristic for text-based PDFs, not a guarantee for every layout. Sparse values are independent lists, not joined table records; all values require review. Photo recognition identifies the source PDF page, whose text supplies values. Highlight detection, photo alignment, QR, report formulas and exports remain future work.
 
 Older region templates remain available under Other saved pattern sets. All imports and patterns stay in IndexedDB locally.
+
+## Refine with examples (v0.7.0)
+
+Tap Refine on a suggestion or a saved pattern. Mark correct examples Keep and wrong examples Not this. The preview shows kept, review and excluded counts before you save. On suggestions, Use this refinement updates the preview; Name & confirm saves the pattern and teaching together. Saved patterns offer Save refinement directly.
+
+Exact rejected examples are excluded. Two distinct kept/rejected examples with the same character-and-length format teach that format for subsequent pages. Unfamiliar or conflicting formats remain visible for review; explicit kept exceptions take priority. This is local example-based format filtering, not semantic proof that a value is a valid part. Excluded values remain inspectable and teachable. Clear teaching and save to undo the filter. No PDF, photo or teaching examples leave the browser.

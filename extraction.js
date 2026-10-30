@@ -1,3 +1,4 @@
+import {refineResult} from './refinement.js';
 import {extractRule} from './patterns.js';
 // Coordinates are normalized to the rendered page's top-left origin.
 export function regionFromPoints(a,b){
@@ -43,7 +44,7 @@ export function capturePattern(text,pattern){
   }
   return values.filter(Boolean).join(' ');
 }
-export function extractField(field,boxes){
+function extractRawField(field,boxes){
   if(field.rule)return extractRule(field.rule,boxes);
   const r=field.region;
   const selected=boxes.filter(b=>{
@@ -63,3 +64,5 @@ export function extractField(field,boxes){
   const value=field.pattern?capturePattern(input,field.pattern):input;
   return value===null?{value:'',status:'Pattern did not match'}:{value,status:'Review value'};
 }
+
+export function extractField(field,boxes){return refineResult(extractRawField(field,boxes),field.refinement);}
