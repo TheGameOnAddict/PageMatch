@@ -17,6 +17,7 @@ export function createSeparator({field,fields,results,onApply,onCancel}){
  const cut=select('Words to keep on that side',[],'1'),delimiter=input('Separator text','');
  const unsplit=select('If a line cannot be split, it belongs to',[['Second pattern','after'],['First pattern','before']],'after');
  const controls=el('div',undefined,'structure-controls');controls.append(example.root,method.root,from.root,cut.root,delimiter.root,unsplit.root);
+ const advanced=el('details');advanced.append(el('summary','Adjust how each line is split'),controls);
  const picks=el('div',undefined,'refine-examples');picks.hidden=true;const selected=new Set();
  unique.forEach(v=>{const label=el('label',v,'pick-example'),check=el('input');check.type='checkbox';check.onchange=()=>{if(check.checked)selected.add(v);else selected.delete(v);preview();};label.prepend(check);picks.append(label);});
  const notice=el('p',undefined,'record-warning');notice.setAttribute('role','status');const output=el('div',undefined,'split-preview');
@@ -24,13 +25,13 @@ export function createSeparator({field,fields,results,onApply,onCancel}){
  function config(side){return {kind:method.control.value,at:Number(cut.control.value)||1,fromEnd:from.control.value==='right',delimiter:delimiter.control.value,unsplit:unsplit.control.value,side};}
  function pair(value){if(mode.control.value==='examples'){const move=refineValues([value],{keep:[...selected],reject:[]}).rows[0].decision==='keep';return move?['',value]:[value,''];}return [splitValue(value,config('before')),splitValue(value,config('after'))];}
  function preview(){
-  const splitting=mode.control.value==='split';controls.hidden=!splitting;picks.hidden=splitting;delimiter.root.hidden=method.control.value!=='delimiter';from.root.hidden=cut.root.hidden=method.control.value!=='words';
+  const splitting=mode.control.value==='split';advanced.hidden=!splitting;controls.hidden=false;picks.hidden=splitting;delimiter.root.hidden=method.control.value!=='delimiter';from.root.hidden=cut.root.hidden=method.control.value!=='words';
   output.replaceChildren(el('h5','Preview'));
   const table=el('table'),head=el('tr');head.append(el('th',left.control.value||'First'),el('th',right.control.value||'Second'));table.append(head);
   values.slice(0,10).forEach(value=>{const row=el('tr');pair(value).forEach(v=>row.append(el('td',v||'—')));table.append(row);});output.append(table,el('p','Previewing up to 10 lines. Blank cells keep their original row positions.','muted'));
  }
  mode.control.onchange=preview;method.control.onchange=preview;from.control.onchange=preview;cut.control.onchange=preview;unsplit.control.onchange=preview;delimiter.control.oninput=preview;left.control.oninput=preview;right.control.oninput=preview;example.control.onchange=()=>{cuts();preview();};
- panel.append(mode.root,left.root,right.root,controls,picks,output,notice);
+ panel.append(mode.root,left.root,right.root,advanced,picks,output,notice);
  panel.append(button('Save separate patterns',()=>{
   try{
    const a=left.control.value.trim(),b=right.control.value.trim();if(!a||!b||a.toLowerCase()===b.toLowerCase())throw Error('Give the two patterns different names.');

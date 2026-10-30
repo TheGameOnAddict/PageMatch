@@ -92,10 +92,11 @@ export function createTraining({catalogs,openPdf,loadTemplates,saveTemplate,onOp
      await persist(next,layout);render();message('Separate patterns saved. The original is retained as their source.');
     }),onCancel:()=>refinementHost.replaceChildren()}));
    }));
-   card.append(button(field.hidden?'Show on page':'Hide from page',()=>task(async()=>{
+   const shown=arrangement?arrangement.fields.includes(field.name):!field.hidden;
+   card.append(button(arrangement?(shown?'Hide from rows':'Show in rows'):(shown?'Hide from page':'Show on page'),()=>task(async()=>{
     let layout=arrangement?structuredClone(arrangement):undefined;
-    if(layout){layout.fields=field.hidden?[...new Set([...layout.fields,field.name])]:layout.fields.filter(n=>n!==field.name);if(!layout.fields.length)throw Error('Keep at least one field in the arrangement.');}
-    await persist(fields.map(f=>f.name===field.name?{...f,hidden:!f.hidden}:f),layout);render();
+    if(layout){layout.fields=shown?layout.fields.filter(n=>n!==field.name):[...new Set([...layout.fields,field.name])];if(!layout.fields.length)throw Error('Keep at least one field in the arrangement.');}
+    await persist(fields.map(f=>f.name===field.name?{...f,hidden:shown}:f),layout);render();
    }),'text-button'));
    if(field.source)card.append(el('small','Derived from '+(fields.find(f=>f.name===field.source)?.displayName||field.source),'muted'));
    card.append(button('Remove pattern',()=>task(async()=>{
